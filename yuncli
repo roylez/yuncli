@@ -1,0 +1,296 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+#Description:
+
+require 'net/http'
+require 'uri'
+require 'json'
+require 'readline'
+require 'logger'
+require 'shellwords'
+require 'pathname'
+require 'pry-byebug'
+
+APP_NAME     = 'bypy'
+APP_ROOT_DIR = "/apps/" + APP_NAME + '/'
+API_KEY      = 'q8WE4EpCsau1oS0MplgMKNBn'
+AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
+AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
+SESSION_FILE = File.expand_path('~/.baidduyun')
+PCS_BASE_URI = 'https://pcs.baidu.com/rest/2.0/pcs/'
+PCS_PREFIX   = '/rest/2.0/pcs/'
+PCS_METHODS = {
+  :quota_info           => :GET,
+  :file_upload          => :POST,
+  :file_download        => :GET,
+  :file_createsuperfile => :POST,
+  :file_mkdir           => :POST,
+  :file_meta            => :GET,
+  :file_list            => :GET,
+  :file_move            => :POST,
+  :file_copy            => :POST,
+  :file_delete          => :POST,
+  :file_search          => :GET,
+  :file_diff            => :GET,
+  :file_streaming       => :GET,
+  :thunmbnail_generate  => :GET,
+}
+
+class BaiduYun
+  attr_accessor :logger
+  def initialize
+    u = URI( PCS_BASE_URI )
+    @http = Net::HTTP.new(u.host, u.port)
+    @http.use_ssl = true
+  end
+
+  def authenticate
+    params = {
+      client_id:     API_KEY,
+      response_type: 'code',
+      redirect_uri:  'oob',
+      scope:         'basic netdisk'
+    }
+    auth_url = full_uri(AUTH_API_URL, params)
+    puts "Please visit the following address and copy authentication token:"
+    puts; puts auth_url; puts
+    print "Please enter token and press ENTER: "
+
+    res = request_json(AUTH_SERV, code: STDIN.gets.chomp, redirect_uri: 'oob')
+
+    save_session(res)
+    @token = res[:access_token]
+  end
+
+  def run(cmd, params = {})
+    authenticate_first
+    params[:access_token] = @token
+    command, method = cmd.to_s.split("_")
+    args = params.merge(:method => method, :request => PCS_METHODS[cmd])
+
+    log.info "send command: #{cmd}"
+    log.info "params: #{args}"
+    request_json(PCS_PREFIX + command, args)
+  end
+
+  def authenticate_first
+    authenticate unless @token or load_session
+  end
+
+  # PCS functions starts here...
+  def method_missing(method, *opts, **kwds)
+    send(:run, method, *opts, **kwds)
+  end
+
+  private
+
+  def load_session
+    if File.file? SESSION_FILE
+      session = JSON.parse(open(SESSION_FILE).read, :symbolize_names => true)
+      @token = session[:access_token]
+      log.info "Token loaded: #{@token}"
+    end
+    @token
+  rescue
+    log.fatal "Error loading token from #{SESSION_FILE}"
+    exit 1
+  end
+
+  def save_session(session_detail)
+    log.info "Session saved to #{SESSION_FILE}"
+    open(SESSION_FILE, 'w') {|f| f.puts session_detail.to_json }
+  end
+
+  def log; @logger ||= Logger.new(STDOUT); end
+
+  def encode(params)
+    [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
+    URI.encode_www_form(params)
+  end
+
+  def full_path(path)
+    File.expand_path(File.join(APP_ROOT_DIR, path))
+  end
+
+  def full_uri(base_uri, params)
+    params.empty? ? base_uri : ( base_uri + '?' + encode(params) )
+  end
+
+  def request_json(uri, params = {})
+    req = request(uri, params)
+    str = req.strip
+    log.info(:RESPONSE) { str }
+    res = JSON.parse(str, :symbolize_names => true)
+    res
+  rescue JSON::ParserError
+    req
+  end
+
+  def request(uri, params = {})
+    request_method = params.delete(:request) || :GET
+    case request_method
+    when :GET
+      request_uri = full_uri(uri, params)
+      request     = Net::HTTP::Get.new(request_uri)
+    when :POST
+      request = Net::HTTP::Post.new(uri)
+      request.form_data = params
+    end
+    log.info(request_method) { uri }
+    log.info(request_method) { "PARAMS: #{params}" }
+    @http.request(request)
+  end
+end
+
+class BaiduYunCLI
+  def initialize
+    @client = BaiduYun.new
+    @pwd    = APP_ROOT_DIR
+    @lpwd   = ENV['PWD']
+    @stty_save = `stty -g`.chomp
+  end
+
+  def main_loop
+    while line = Readline.readline(prompt, true)
+      case line.strip
+      when /^cd$/i;         cd APP_ROOT_DIR
+      #when /^[h|?]$/i;      help
+      #when /^cd\s+(.+)$/i;  cd $1
+      #when /^ls\s+(.+)$/i;  ls $1
+      #when /^q$/i;          quit       # terminate cli
+      #when /^quota$/i;      quota
+      when /^([^ ]+)(?:\s+([^ ].*))?$/i;
+        if methods.include? $1.to_sym
+          $2 ? send($1, *(Shellwords.split($2))) : send($1)
+        else
+          puts "Invalid Command"
+        end
+      else; puts "Invalid Command"
+      end
+    end
+  rescue Interrupt
+    puts "Interrupted... quitting"
+    quit
+  end
+
+  def quit
+    system('stty', @stty_save); exit
+  end
+
+  def help
+    puts <<-HELP
+    h/?         print this help
+    c           clear all filters
+    f ...       apply one or more filters
+    l NUM       limit result to NUM of records
+    p           print selected results
+    p NUM       print records matching specified DeliverableID
+    HELP
+  end
+
+  def ls(path = nil)
+    res = @client.file_list(:path => path || relative_path )
+    format_list_output(res)   unless res[:error_code]
+  end
+
+  def lcd(path)
+    @lpwd = absolute_path(path, @lpwd)
+    puts "Local working directory changed to: #{@lpwd}"
+  end
+
+  def cd(path)
+    path = absolute_path(path, @pwd)
+    # going above root dir is not allowed
+    @pwd = path >= APP_ROOT_DIR ? path : APP_ROOT_DIR
+  end
+
+  def pwd
+    puts "REMOTE: " + @pwd
+    puts "LOCAL:  " + @lpwd
+  end
+
+  def quota
+    res = @client.quota_info
+    puts "QUOTA:  #{format_size res[:quota] }"
+    puts "USED:   #{format_size res[:used] }"
+  end
+
+  def cp(from, to)
+    res = @client.file_copy(:from => from, :to => to)
+    puts res[:from] + "  =>  " + res[:to]
+  end
+
+  def find(wd, path = '.')
+    res = @client.file_search(path: path, wd: wd, re: "1")
+    format_list_output(res)   unless res[:error_code]
+  end
+
+  def debug(status = 'on')
+    @client.logger = Logger.new( status == 'on' ? STDOUT : "/dev/null" )
+  end
+
+  private
+
+  # find path relative to "to" address
+  def relative_path(path = @pwd, to = APP_ROOT_DIR)
+    Pathname.new(path).relative_path_from(Pathname.new(to)).to_s
+  end
+
+  # find a full path
+  #   path:       a relative path or full path
+  #   reference:  reference location, i.e., pwd
+  def absolute_path(path, reference = @pwd)
+    path = File.expand_path(File.join(reference, path))  unless path.start_with? '/'
+    path
+  end
+
+  def prompt
+    "BaiduYun".color("34;47") + ' ' + @pwd.color('32;1')  +' > '
+  end
+
+  def format_list_output(res)
+    res[:list].each do |f|
+      str = [:fs_id, :size, :mtime].map{|k| format_field(k, f[k]) }.join("  ")
+      str << "  " << format_path(f[:path], f[:isdir])
+      puts str
+    end
+  end
+
+  def format_field(field, record)
+    send("format_#{field}", record)
+  end
+
+  def format_fs_id(record); "%16s" % record; end
+  def format_mtime(record)
+    t = Time.at(record)
+    '['.color('33') + t.strftime("%Y-%m-%d").color('32') + ' ' +
+      t.strftime("%H:%M:%S").color('35') + "]".color('33')
+  end
+
+  def format_size(size)
+    s = case size
+        when  0..1024;               size.to_s
+        when  1024..1024000;         "%.2f" % (size/1E3) + 'K'
+        when  1024000..1024000000;   "%.2f" % (size/1E6) + 'M'
+        else;                        "%.2f" % (size/1E9) + 'G'
+        end
+    "%8s" % s
+  end
+
+  def format_path(record, isdir = 0)
+    path = relative_path(record, @pwd)
+    isdir == 0 ? path : path.color('34;1;4')
+  end
+end
+
+class String
+  def color(code)
+    "\e[#{code}m" + self + "\e[m"
+  end
+end
+
+if __FILE__ == $0
+  cli = BaiduYunCLI.new
+  cli.main_loop
+  #cli.ls
+end
