@@ -127,18 +127,19 @@ class BaiduYun
 
   def request(uri, params = {})
     request_method = params.delete(:request) || :GET
+    log.info(request_method) { uri }
+    log.info(request_method) { "PARAMS: #{params}" }
     case request_method
     when :GET
       request_uri = full_uri(uri, params)
       request     = Net::HTTP::Get.new(request_uri)
     when :POST
       form_data = params.delete(:form) || { }
+      log.info(:POST) { "FORM: #{form_data}"}
       request_uri = full_uri(uri, params)
       request = Net::HTTP::Post.new(request_uri)
       request.form_data = form_data
     end
-    log.info(request_method) { uri }
-    log.info(request_method) { "PARAMS: #{params}" }
     @http.request(request)
   end
 end
@@ -225,6 +226,13 @@ class BaiduYunCLI
         puts "COPY: " +  i[:from] + "  =>  " + i[:to]
       end
     }
+  end
+
+  # here the batch delete API is used for speed
+  def rm(*path)
+    api_run(:file_delete,
+            :form => { :param => {:list => path.map{|f| {:path => absolute_path(f) }}}.to_json }  )
+    on_success{ nil }
   end
 
   def find(wd, path = '.')
