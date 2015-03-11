@@ -66,6 +66,8 @@ class BaiduYun
     authenticate_first
     params[:access_token] = @token
     command, method = cmd.to_s.split("_")
+
+    [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
     args = params.merge(:method => method, :request => PCS_METHODS[cmd])
 
     request_json(PCS_PREFIX + command, args)
@@ -102,7 +104,6 @@ class BaiduYun
   def log; @logger ||= Logger.new(STDOUT); end
 
   def encode(params)
-    [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
     URI.encode_www_form(params)
   end
 
