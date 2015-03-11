@@ -68,8 +68,6 @@ class BaiduYun
     command, method = cmd.to_s.split("_")
     args = params.merge(:method => method, :request => PCS_METHODS[cmd])
 
-    log.info "send command: #{cmd}"
-    log.info "params: #{args}"
     request_json(PCS_PREFIX + command, args)
   end
 
@@ -143,9 +141,9 @@ end
 
 class BaiduYunCLI
   def initialize
-    @client = BaiduYun.new
-    @pwd    = APP_ROOT_DIR
-    @lpwd   = ENV['PWD']
+    @api  = BaiduYun.new
+    @pwd  = APP_ROOT_DIR
+    @lpwd = ENV['PWD']
     @stty_save = `stty -g`.chomp
   end
 
@@ -188,8 +186,8 @@ class BaiduYunCLI
   end
 
   def ls(path = nil)
-    res = @client.file_list(:path => path || relative_path )
-    format_list_output(res)   unless res[:error_code]
+    api_run(:file_list, :path => path || relative_path )
+    on_success{  format_list_output(@res)  }
   end
 
   def lcd(path)
@@ -209,26 +207,40 @@ class BaiduYunCLI
   end
 
   def quota
-    res = @client.quota_info
-    puts "QUOTA:  #{format_size res[:quota] }"
-    puts "USED:   #{format_size res[:used] }"
+    api_run(:quota_info)
+    on_success do
+      puts "QUOTA:  #{format_size @res[:quota] }"
+      puts "USED:   #{format_size @res[:used] }"
+    end
   end
 
   def cp(from, to)
-    res = @client.file_copy(:from => from, :to => to)
-    puts res[:from] + "  =>  " + res[:to]
+    api_run(:file_copy, :from => from, :to => to)
+    on_success{ puts @res[:from] + "  =>  " + @res[:to] }
   end
 
   def find(wd, path = '.')
-    res = @client.file_search(path: path, wd: wd, re: "1")
-    format_list_output(res)   unless res[:error_code]
+    api_run(:file_search, path: path, wd: wd, re: "1")
+    on_success{ format_list_output(@res) }
   end
 
   def debug(status = 'on')
-    @client.logger = Logger.new( status == 'on' ? STDOUT : "/dev/null" )
+    @api.logger = Logger.new( status == 'on' ? STDOUT : "/dev/null" )
   end
 
   private
+
+  def api_run(method, *opts, **kwds)
+    @res = @api.run(method, *opts, **kwds)
+  end
+
+  def on_success
+    unless @res[:error_code]
+      yield
+    else
+      puts "Error: [#{@res[:error_code]}] #{@res[:error_msg]}"
+    end
+  end
 
   # find path relative to "to" address
   def relative_path(path = @pwd, to = APP_ROOT_DIR)
