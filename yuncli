@@ -117,13 +117,12 @@ class BaiduYun
   end
 
   def request_json(uri, params = {})
-    req = request(uri, params)
-    str = req.strip
-    log.info(:RESPONSE) { str }
-    res = JSON.parse(str, :symbolize_names => true)
-    res
+    req  = request(uri, params)
+    body = req.body
+    log.info(:RESPONSE) { body }
+    JSON.parse(body, :symbolize_names => true)
   rescue JSON::ParserError
-    req
+    body
   end
 
   def request(uri, params = {})
