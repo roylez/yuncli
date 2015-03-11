@@ -108,7 +108,8 @@ class BaiduYun
   end
 
   def full_path(path)
-    File.expand_path(File.join(APP_ROOT_DIR, path))
+    path = File.expand_path(File.join(APP_ROOT_DIR, path))   unless path.start_with? '/'
+    path
   end
 
   def full_uri(base_uri, params)
@@ -131,8 +132,10 @@ class BaiduYun
       request_uri = full_uri(uri, params)
       request     = Net::HTTP::Get.new(request_uri)
     when :POST
-      request = Net::HTTP::Post.new(uri)
-      request.form_data = params
+      form_data = params.delete(:form) || { }
+      request_uri = full_uri(uri, params)
+      request = Net::HTTP::Post.new(request_uri)
+      request.form_data = form_data
     end
     log.info(request_method) { uri }
     log.info(request_method) { "PARAMS: #{params}" }
@@ -216,8 +219,12 @@ class BaiduYunCLI
   end
 
   def cp(from, to)
-    api_run(:file_copy, :from => from, :to => to)
-    on_success{ puts @res[:from] + "  =>  " + @res[:to] }
+    api_run(:file_copy, :from => absolute_path(from), :to => absolute_path(to))
+    on_success{
+      @res[:extra][:list].each do |i|
+        puts "COPY: " +  i[:from] + "  =>  " + i[:to]
+      end
+    }
   end
 
   def find(wd, path = '.')
