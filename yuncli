@@ -127,7 +127,7 @@ class BaiduYunConn
   def request_json(uri, params = {})
     req  = request(uri, params)
     body = req.body
-    log.info(:RESPONSE) { body }
+    log.info(:RESPONSE) { params[:method] == 'download' ? "-- FILE CONTENT --" : body }
     JSON.parse(body, :symbolize_names => true)
   rescue JSON::ParserError
     body
@@ -205,6 +205,11 @@ class BaiduYun
 
   def find(wd, path = '.')
     api_run(:file_search, path: path, wd: wd, re: "1")
+  end
+
+  def get(path)
+    fn = File.basename(path)
+    open(File.join(@lpwd, fn), 'wb'){|f| f.puts api_run(:file_download, path: absolute_path(path)) }
   end
 
   def debug(status = 'on')
