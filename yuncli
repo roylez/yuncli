@@ -9,7 +9,7 @@ require 'readline'
 require 'logger'
 require 'shellwords'
 require 'pathname'
-require 'pry-byebug'
+#require 'pry-byebug'
 
 APP_NAME     = 'bypy'
 APP_ROOT_DIR = "/apps/" + APP_NAME + '/'
@@ -135,8 +135,8 @@ class BaiduYunConn
 
   # uri:
   #   /foo/bar    partial uri, method will continue to use @http set with
-  #               BaiduYunConn#server= method
-  #   htt://foo   a full uri. @http will be reset by invoking #server= method
+  #               BaiduYunConn#server method
+  #   htt://foo   a full uri. @http will be reset by invoking #server method
   #
   # params:
   #   :request    request method GET/POST/ETC     default :GET
@@ -213,7 +213,8 @@ class BaiduYun
   end
 
   def debug(status = 'on')
-    @api.logger = Logger.new( status == 'on' ? STDOUT : "/dev/null" )
+    @debug = ( status.downcase == 'on' )
+    @api.logger = Logger.new( @debug ? STDOUT : "/dev/null" )
   end
 
   private
@@ -434,5 +435,4 @@ end
 if __FILE__ == $0
   cli = BaiduYunCLI.new
   cli.main_loop
-  #cli.ls
 end
