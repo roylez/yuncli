@@ -285,12 +285,22 @@ class BaiduYunCLI < BaiduYun
 
   def help
     puts <<-HELP
-    h/?         print this help
-    c           clear all filters
-    f ...       apply one or more filters
-    l NUM       limit result to NUM of records
-    p           print selected results
-    p NUM       print records matching specified DeliverableID
+    help          显示本帮助
+    auto_server   自动选择最快的服务器
+    cd            更改服务器目录
+    cp OLD NEW    在服务器复制文件
+    debug on      打开debug显示
+    find FILE     递归在当前目录查找文件
+    get FILE      下载单个文件
+    history       历史命令
+    lcd           切换本地目录
+    ls [DIR]      列出文件列表
+    pwd           当前目录
+    quota         容量使用信息
+    rm FILE...    删除文件
+    server        显示当前使用的服务器
+    servers       显示可以使用的服务器列表
+    quit          退出
     HELP
   end
 
@@ -317,11 +327,14 @@ class BaiduYunCLI < BaiduYun
 
   def cp(from, to)
     super
-    on_success{
-      @res[:extra][:list].each do |i|
-        puts "COPY: " +  i[:from] + "  =>  " + i[:to]
-      end
-    }
+    on_success do
+      @res[:extra][:list].each { |i| puts "COPY: " +  i[:from] + "  =>  " + i[:to] }
+    end
+  end
+
+  def get(path)
+    fn = File.basename(path)
+    open(File.join(@lpwd, fn), 'wb'){|f| f.puts api_run(:file_download, path: absolute_path(path)) }
   end
 
   # here the batch delete API is used for speed
@@ -339,8 +352,14 @@ class BaiduYunCLI < BaiduYun
 
   def server; puts super.host; end
 
+  def servers
+    super
+    on_success{ @res[:server].each{|s| puts s == @res[:host] ? s + "\t(fastest)" : s } }
+  end
+
   def auto_server
-    servers
+    # an ugly way to call a super method that is overridden
+    BaiduYun.instance_method(:servers).bind(self).call
     on_success{ @api.server @res[:host] }
   end
 
@@ -378,11 +397,12 @@ class BaiduYunCLI < BaiduYun
     end
   end
 
-  def format_field(field, record)
+  def format_field(field, record);
     send("format_#{field}", record)
   end
 
   def format_fs_id(record); "%16s" % record; end
+
   def format_mtime(record)
     t = Time.at(record)
     '['.color('33') + t.strftime("%Y-%m-%d").color('32') + ' ' +
