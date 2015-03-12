@@ -209,10 +209,16 @@ class BaiduYunCLI < BaiduYun
     super
     @stty_save = `stty -g`.chomp
     trap("INT") {system('stty', @stty_save); exit}
+    @comp_list = ( BaiduYun.instance_methods(false) << :history ).map(&:to_s).sort
+    @comp = proc {|s|
+      # complete command if there is no command entered
+      @comp_list.grep(/^#{Regexp.escape(s)}/) unless Readline.line_buffer =~ /^.* /
+    }
   end
 
   def main_loop
     load_history
+    Readline.completion_proc = @comp
     while @line = Readline.readline(prompt, true)
       case @line.strip
       when /^cd$/i;         cd APP_ROOT_DIR
