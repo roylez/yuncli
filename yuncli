@@ -21,20 +21,24 @@ SESSION_LOG  = File.expand_path("~/.baiduyun.log")
 PCS_BASE_URI = 'https://pcs.baidu.com/rest/2.0/pcs/'
 PCS_PREFIX   = '/rest/2.0/pcs/'
 PCS_METHODS = {
-  :quota_info           => :GET,
-  :file_upload          => :POST,
-  :file_download        => :GET,
-  :file_createsuperfile => :POST,
-  :file_mkdir           => :POST,
-  :file_meta            => :GET,
-  :file_list            => :GET,
-  :file_move            => :POST,
-  :file_copy            => :POST,
-  :file_delete          => :POST,
-  :file_search          => :GET,
-  :file_diff            => :GET,
-  :file_streaming       => :GET,
-  :thunmbnail_generate  => :GET,
+  :quota_info                      => :GET,
+  :file_upload                     => :POST,
+  :file_download                   => :GET,
+  :file_createsuperfile            => :POST,
+  :file_mkdir                      => :POST,
+  :file_meta                       => :GET,
+  :file_list                       => :GET,
+  :file_move                       => :POST,
+  :file_copy                       => :POST,
+  :file_delete                     => :POST,
+  :file_search                     => :GET,
+  :file_diff                       => :GET,
+  :file_streaming                  => :GET,
+  :thunmbnail_generate             => :GET,
+  :"services/cloud_dl|list_task"   => :POST,
+  :"services/cloud_dl|query_task"  => :POST,
+  :"services/cloud_dl|add_task"    => :POST,
+  :"services/cloud_dl|cancel_task" => :POST,
 }
 
 # This class defines connectivity level stuff
@@ -76,12 +80,13 @@ class BaiduYunConn
   def run(cmd, params = {})
     authenticate_first
     params[:access_token] = @token
-    command, method = cmd.to_s.split("_")
+    service, method = split_command(cmd.to_s)
 
     [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
-    args = params.merge(:method => method, :request => PCS_METHODS[cmd] || :GET )
 
-    request_json(PCS_PREFIX + command, args)
+    args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :GET )
+
+    request_json(PCS_PREFIX + service, args)
   end
 
   def authenticate_first
@@ -95,6 +100,10 @@ class BaiduYunConn
   end
 
   private
+
+  def split_command(cmd)
+    cmd.include?('|') ? cmd.split('|') : cmd.split('_')
+  end
 
   def load_session
     if File.file? SESSION_FILE
@@ -183,7 +192,7 @@ class BaiduYun
     api_run(:file_copy, :from => absolute_path(from), :to => absolute_path(to))
   end
 
-  def lcd; @lpwd = absolute_path(path, @lpwd) ; end
+  def lcd(path); @lpwd = File.expand_path(path) ; end
 
   #  API found here, no doc anywhere ....
   #  https://github.com/ly0/baidupcsapi/blob/master/baidupcsapi/api.py
@@ -199,6 +208,7 @@ class BaiduYun
       @file_list[full_path] = @res[:list].map{|i| File.basename(i[:path]) }
     end
   end
+  alias :_ls :ls
 
   def pwd; [ @pwd, @lpwd ] ; end
 
@@ -230,9 +240,17 @@ class BaiduYun
     @api.logger = Logger.new( @debug ? STDOUT : "/dev/null" )
   end
 
-  private
+  def dl
+    api_run("services/cloud_dl|list_task")
+  end
 
-  alias :_ls :ls
+  def da(url)
+    api_run("services/cloud_dl|add_task",
+            source_url: url,
+            save_path: @pwd )
+  end
+
+  private
 
   def api_run(method, *opts, **kwds)
     @res = @api.run(method, *opts, **kwds)
@@ -267,13 +285,11 @@ class BaiduYunCLI < BaiduYun
     super
     @stty_save = `stty -g`.chomp
     trap("INT") {system('stty', @stty_save); exit}
-    @commands = [BaiduYun, BaiduYunCLI].
-      map{|i| i.instance_methods(false)}.inject(&:+).map(&:to_s).sort.uniq
-    @commands.delete('main_loop')
+
     @comp = proc {|s|
       # complete command if there is no command entered
       unless Readline.line_buffer =~ /^(.*?) /
-        @commands.grep(/^#{Regexp.escape(s)}/i)
+        cli_commands.grep(/^#{Regexp.escape(s)}/i)
       else
         case $1
         when /^(cp|mv|get)/;
@@ -316,11 +332,14 @@ class BaiduYunCLI < BaiduYun
     cd            更改服务器目录
     cp OLD NEW    在服务器复制文件
     debug on      打开debug显示
+    da URL        添加离线下载
+    dl            查看离线下载列表
     find FILE     递归在当前目录查找文件
     get FILE      下载单个文件
     history       历史命令
     lcd           切换本地目录
     ls [DIR]      列出文件列表
+    mget PATTERN  批量下载(单线程)
     pwd           当前目录
     quota         容量使用信息
     rm FILE...    删除文件
@@ -391,6 +410,15 @@ class BaiduYunCLI < BaiduYun
   end
 
   private
+
+  def cli_commands
+    return @commands  if @commands
+    @commands = [BaiduYun, BaiduYunCLI].
+      map{|i| i.instance_methods(false)}.inject(&:+).map(&:to_s).sort.uniq
+    @commands.delete('main_loop')
+    @commands.delete_if{|i| i.start_with? '_' }
+    @commands
+  end
 
   def super_method(method)
     BaiduYun.instance_method(method).bind(self)
