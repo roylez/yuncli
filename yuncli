@@ -41,9 +41,17 @@ PCS_METHODS = {
 class BaiduYunConn
   attr_accessor :logger
   def initialize
-    u = URI( PCS_BASE_URI )
-    @http = Net::HTTP.new(u.host, u.port)
+    server PCS_BASE_URI
+  end
+
+  def server(server_uri = nil)
+    return @server unless server_uri
+    server_uri = "https://" + server_uri  unless server_uri.start_with? 'http'
+    @server = URI(server_uri)
+    @http = Net::HTTP.new(@server.host, @server.port)
     @http.use_ssl = true
+    log.info "Server set to: #{@server.host}"
+    @server
   end
 
   def authenticate
@@ -61,6 +69,7 @@ class BaiduYunConn
     res = request_json(AUTH_SERV, code: STDIN.gets.chomp, redirect_uri: 'oob')
 
     save_session(res)
+
     @token = res[:access_token]
   end
 
@@ -70,13 +79,14 @@ class BaiduYunConn
     command, method = cmd.to_s.split("_")
 
     [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
-    args = params.merge(:method => method, :request => PCS_METHODS[cmd])
+    args = params.merge(:method => method, :request => PCS_METHODS[cmd] || :GET )
 
     request_json(PCS_PREFIX + command, args)
   end
 
   def authenticate_first
     authenticate unless @token or load_session
+    server PCS_BASE_URI
   end
 
   # PCS functions starts here...
@@ -123,20 +133,32 @@ class BaiduYunConn
     body
   end
 
+  # uri:
+  #   /foo/bar    partial uri, method will continue to use @http set with
+  #               BaiduYunConn#server= method
+  #   htt://foo   a full uri. @http will be reset by invoking #server= method
+  #
+  # params:
+  #   :request    request method GET/POST/ETC     default :GET
+  #   :form       POST data form                  defualt { }
+  #   ....        query data
   def request(uri, params = {})
     request_method = params.delete(:request) || :GET
     log.info(request_method) { uri }
     log.info(request_method) { "PARAMS: #{params}" }
+    if uri.start_with? 'http'
+      uri = server(uri).request_uri   # create @http to match uri
+    end
     case request_method
     when :GET
       request_uri = full_uri(uri, params)
       request     = Net::HTTP::Get.new(request_uri)
     when :POST
-      form_data = params.delete(:form) || { }
-      log.info(:POST) { "FORM: #{form_data}"}
-      request_uri = full_uri(uri, params)
-      request = Net::HTTP::Post.new(request_uri)
+      form_data         = params.delete(:form) || { }
+      request_uri       = full_uri(uri, params)
+      request           = Net::HTTP::Post.new(request_uri)
       request.form_data = form_data
+      log.info(:POST) { "FORM: #{form_data}"}
     end
     @http.request(request)
   end
@@ -161,6 +183,12 @@ class BaiduYun
   end
 
   def lcd; @lpwd = absolute_path(path, @lpwd) ; end
+
+  #  API found here, no doc anywhere ....
+  #  https://github.com/ly0/baidupcsapi/blob/master/baidupcsapi/api.py
+  def servers; api_run(:file_locateupload); end
+
+  def server; @api.server; end
 
   def ls(path = nil)
     api_run(:file_list, :path => path || relative_path )
@@ -300,6 +328,13 @@ class BaiduYunCLI < BaiduYun
 
   def history
     puts Readline::HISTORY.to_a.last(10).join("\n")
+  end
+
+  def server; puts super.host; end
+
+  def auto_server
+    servers
+    on_success{ @api.server @res[:host] }
   end
 
   private
