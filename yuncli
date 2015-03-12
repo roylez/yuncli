@@ -230,7 +230,7 @@ class BaiduYun
 
   def mget(pattern)
     _ls unless files
-    matches = files.select{|f,_| File.fnmatch(pattern, f)}
+    matches = files.select{|f,dir| File.fnmatch(pattern, f) and not dir }.map(&:first)
     # download one by one as I am poor man
     matches.each { |f| get(f) }
   end
@@ -253,7 +253,7 @@ class BaiduYun
   private
 
   def files
-    @files.fetch(@pwd)
+    @files.fetch(@pwd, nil)
   end
 
   def api_run(method, *opts, **kwds)
