@@ -290,7 +290,8 @@ class BaiduYunCLI < BaiduYun
   def initialize
     super
     @stty_save = `stty -g`.chomp
-    trap("INT") {system('stty', @stty_save); exit}
+    #trap("INT") {system('stty', @stty_save); exit}   # trap ^C and gracefully exit
+    trap("INT", 'SIG_IGN')    # trap ^C and return back to loop
 
     @comp = proc {|s|
       # complete command if there is no command entered
