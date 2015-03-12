@@ -296,7 +296,7 @@ class BaiduYunCLI < BaiduYun
         cli_commands.grep(/^#{Regexp.escape(s)}/i)
       else
         case $1
-        when /^(cp|mv|get)/
+        when /^(cp|mv|get|rm)/
           files.map(&:first).grep(/^#{Regexp.escape(s)}/i)  if files
         when /^cd/
           files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
