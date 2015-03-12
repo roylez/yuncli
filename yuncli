@@ -90,8 +90,10 @@ class BaiduYunConn
   end
 
   def authenticate_first
-    authenticate unless @token or load_session
-    server PCS_BASE_URI
+    unless @token or load_session
+      authenticate
+      server PCS_BASE_URI
+    end
   end
 
   # PCS functions starts here...
