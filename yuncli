@@ -16,7 +16,8 @@ APP_ROOT_DIR = "/apps/" + APP_NAME + '/'
 API_KEY      = 'q8WE4EpCsau1oS0MplgMKNBn'
 AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
 AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
-SESSION_FILE = File.expand_path('~/.baidduyun')
+SESSION_FILE = File.expand_path('~/.baiduyun')
+SESSION_LOG  = File.expand_path("~/.baiduyun.log")
 PCS_BASE_URI = 'https://pcs.baidu.com/rest/2.0/pcs/'
 PCS_PREFIX   = '/rest/2.0/pcs/'
 PCS_METHODS = {
@@ -150,11 +151,13 @@ class BaiduYunCLI
     @pwd  = APP_ROOT_DIR
     @lpwd = ENV['PWD']
     @stty_save = `stty -g`.chomp
+    trap("INT") {system('stty', @stty_save); exit}
   end
 
   def main_loop
-    while line = Readline.readline(prompt, true)
-      case line.strip
+    load_history
+    while @line = Readline.readline(prompt, true)
+      case @line.strip
       when /^cd$/i;         cd APP_ROOT_DIR
       #when /^[h|?]$/i;      help
       #when /^cd\s+(.+)$/i;  cd $1
@@ -169,6 +172,9 @@ class BaiduYunCLI
         end
       else; puts "Invalid Command"
       end
+
+      # remove empty or dupicated commands
+      save_history
     end
   rescue Interrupt
     puts "Interrupted... quitting"
@@ -245,6 +251,18 @@ class BaiduYunCLI
   end
 
   private
+
+  def save_history
+    if @line =~ /^\s*$/ or Readline::HISTORY.to_a[-2] == @line
+      Readline::HISTORY.pop
+    else
+      open(SESSION_LOG, 'a+') {|f| f.puts @line }
+    end
+  end
+
+  def load_history
+    Readline::HISTORY.push(* open(SESSION_LOG).readlines.map(&:chomp) )   if File.file? SESSION_LOG
+  end
 
   def api_run(method, *opts, **kwds)
     @res = @api.run(method, *opts, **kwds)
