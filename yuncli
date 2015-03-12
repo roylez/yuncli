@@ -176,10 +176,10 @@ end
 # API level stuff defined here
 class BaiduYun
   def initialize
-    @api       = BaiduYunConn.new
-    @pwd       = APP_ROOT_DIR
-    @lpwd      = ENV['PWD']
-    @file_list = {}           # file listing cache for completion and etc
+    @api   = BaiduYunConn.new
+    @pwd   = APP_ROOT_DIR
+    @lpwd  = ENV['PWD']
+    @files = {}           # file listing cache for completion and etc
   end
 
   def cd(path = nil)
@@ -205,7 +205,7 @@ class BaiduYun
     api_run(:file_list, :path => path)
     on_success do
       full_path = absolute_path(path, APP_ROOT_DIR)
-      @file_list[full_path] = @res[:list].map{|i| File.basename(i[:path]) }
+      @files[full_path] = @res[:list].map{|i| [ File.basename(i[:path]), i[:isdir] == 1 ] }
     end
   end
   alias :_ls :ls
@@ -229,8 +229,8 @@ class BaiduYun
   end
 
   def mget(pattern)
-    _ls unless @file_list.key? @pwd
-    matches = @file_list[@pwd].select{|f| File.fnmatch(pattern, f)}
+    _ls unless files
+    matches = files.select{|f,_| File.fnmatch(pattern, f)}
     # download one by one as I am poor man
     matches.each { |f| get(f) }
   end
@@ -251,6 +251,10 @@ class BaiduYun
   end
 
   private
+
+  def files
+    @files.fetch(@pwd)
+  end
 
   def api_run(method, *opts, **kwds)
     @res = @api.run(method, *opts, **kwds)
@@ -292,8 +296,10 @@ class BaiduYunCLI < BaiduYun
         cli_commands.grep(/^#{Regexp.escape(s)}/i)
       else
         case $1
-        when /^(cp|mv|get)/;
-          @file_list[@pwd].grep(/^#{Regexp.escape(s)}/i)  if @file_list.key? @pwd
+        when /^(cp|mv|get)/
+          files.map(&:first).grep(/^#{Regexp.escape(s)}/i)  if files
+        when /^cd/
+          files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
         end
       end
     }
