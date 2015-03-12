@@ -12,7 +12,7 @@ require 'pathname'
 #require 'pry-byebug'
 
 APP_NAME     = 'bypy'
-APP_ROOT_DIR = "/apps/" + APP_NAME + '/'
+APP_ROOT_DIR = File.join("/apps/", APP_NAME)
 API_KEY      = 'q8WE4EpCsau1oS0MplgMKNBn'
 AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
 AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
@@ -167,9 +167,10 @@ end
 # API level stuff defined here
 class BaiduYun
   def initialize
-    @api  = BaiduYunConn.new
-    @pwd  = APP_ROOT_DIR
-    @lpwd = ENV['PWD']
+    @api       = BaiduYunConn.new
+    @pwd       = APP_ROOT_DIR
+    @lpwd      = ENV['PWD']
+    @file_list = {}           # file listing cache for completion and etc
   end
 
   def cd(path = nil)
@@ -191,7 +192,12 @@ class BaiduYun
   def server; @api.server; end
 
   def ls(path = nil)
-    api_run(:file_list, :path => path || relative_path )
+    path = path || relative_path
+    api_run(:file_list, :path => path)
+    on_success do
+      full_path = absolute_path(path, APP_ROOT_DIR)
+      @file_list[full_path] = @res[:list].map{|i| File.basename(i[:path]) }
+    end
   end
 
   def pwd; [ @pwd, @lpwd ] ; end
@@ -235,6 +241,14 @@ class BaiduYun
     path
   end
 
+  def on_success
+    unless @res[:error_code]
+      yield
+    else
+      puts "Error: [#{@res[:error_code]}] #{@res[:error_msg]}"
+    end
+  end
+
 end
 
 # This class defines CLI interactions
@@ -243,12 +257,19 @@ class BaiduYunCLI < BaiduYun
     super
     @stty_save = `stty -g`.chomp
     trap("INT") {system('stty', @stty_save); exit}
-    @comp_list = [BaiduYun, BaiduYunCLI].
+    @commands = [BaiduYun, BaiduYunCLI].
       map{|i| i.instance_methods(false)}.inject(&:+).map(&:to_s).sort.uniq
-    @comp_list.delete('main_loop')
+    @commands.delete('main_loop')
     @comp = proc {|s|
       # complete command if there is no command entered
-      @comp_list.grep(/^#{Regexp.escape(s)}/) unless Readline.line_buffer =~ /^.* /
+      unless Readline.line_buffer =~ /^(.*?) /
+        @commands.grep(/^#{Regexp.escape(s)}/i)
+      else
+        case $1
+        when /cp|mv|get/;
+          @file_list[@pwd].grep(/^#{Regexp.escape(s)}/i)  if @file_list.key? @pwd
+        end
+      end
     }
   end
 
@@ -376,14 +397,6 @@ class BaiduYunCLI < BaiduYun
 
   def load_history
     Readline::HISTORY.push(* open(SESSION_LOG).readlines.map(&:chomp).uniq )   if File.file? SESSION_LOG
-  end
-
-  def on_success
-    unless @res[:error_code]
-      yield
-    else
-      puts "Error: [#{@res[:error_code]}] #{@res[:error_msg]}"
-    end
   end
 
   def prompt
