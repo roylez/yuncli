@@ -313,7 +313,7 @@ class BaiduYunCLI < BaiduYun
   end
 
   def load_history
-    Readline::HISTORY.push(* open(SESSION_LOG).readlines.map(&:chomp) )   if File.file? SESSION_LOG
+    Readline::HISTORY.push(* open(SESSION_LOG).readlines.map(&:chomp).uniq )   if File.file? SESSION_LOG
   end
 
   def on_success
