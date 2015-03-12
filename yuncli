@@ -105,17 +105,13 @@ class BaiduYunConn
 
   def log; @logger ||= Logger.new(STDOUT); end
 
-  def encode(params)
-    URI.encode_www_form(params)
-  end
-
   def full_path(path)
     path = File.expand_path(File.join(APP_ROOT_DIR, path))   unless path.start_with? '/'
     path
   end
 
   def full_uri(base_uri, params)
-    params.empty? ? base_uri : ( base_uri + '?' + encode(params) )
+    params.empty? ? base_uri : ( base_uri + '?' + URI.encode_www_form(params) )
   end
 
   def request_json(uri, params = {})
@@ -258,13 +254,11 @@ class BaiduYunCLI < BaiduYun
   end
 
   def ls(path = nil)
-    super
-    on_success{  format_list_output(@res)  }
+    super; on_success{  format_list_output(@res)  }
   end
 
   def lcd(path)
-    super
-    puts "Local working directory changed to: #{@lpwd}"
+    super; puts "Local working directory changed to: #{@lpwd}"
   end
 
   def pwd
