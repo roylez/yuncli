@@ -37,7 +37,8 @@ PCS_METHODS = {
   :thunmbnail_generate  => :GET,
 }
 
-class BaiduYun
+# This class defines connectivity level stuff
+class BaiduYunConn
   attr_accessor :logger
   def initialize
     u = URI( PCS_BASE_URI )
@@ -145,11 +146,71 @@ class BaiduYun
   end
 end
 
-class BaiduYunCLI
+# API level stuff defined here
+class BaiduYun
   def initialize
-    @api  = BaiduYun.new
+    @api  = BaiduYunConn.new
     @pwd  = APP_ROOT_DIR
     @lpwd = ENV['PWD']
+  end
+
+  def cd(path)
+    path = absolute_path(path, @pwd)
+    # going above root dir is not allowed
+    @pwd = path >= APP_ROOT_DIR ? path : APP_ROOT_DIR
+  end
+
+  def cp(from, to)
+    api_run(:file_copy, :from => absolute_path(from), :to => absolute_path(to))
+  end
+
+  def lcd; @lpwd = absolute_path(path, @lpwd) ; end
+
+  def ls(path = nil)
+    api_run(:file_list, :path => path || relative_path )
+  end
+
+  def pwd; [ @pwd, @lpwd ] ; end
+
+  def quota; api_run(:quota_info); end
+
+  def rm(*path)
+    api_run(:file_delete,
+            :form => { :param => {:list => path.map{|f| {:path => absolute_path(f) }}}.to_json }  )
+  end
+
+  def find(wd, path = '.')
+    api_run(:file_search, path: path, wd: wd, re: "1")
+  end
+
+  def debug(status = 'on')
+    @api.logger = Logger.new( status == 'on' ? STDOUT : "/dev/null" )
+  end
+
+  private
+  def api_run(method, *opts, **kwds)
+    @res = @api.run(method, *opts, **kwds)
+  end
+
+  # find path relative to "to" address
+  def relative_path(path = @pwd, to = APP_ROOT_DIR)
+    Pathname.new(path).relative_path_from(Pathname.new(to)).to_s
+  end
+
+  # find a full path
+  #   path:       a relative path or full path
+  #   reference:  reference location, i.e., pwd
+  def absolute_path(path, reference = @pwd)
+    path = File.expand_path(File.join(reference, path))  unless path.start_with? '/'
+    path
+  end
+
+end
+
+# This class defines CLI interactions
+class BaiduYunCLI < BaiduYun
+  def initialize
+    super
     @stty_save = `stty -g`.chomp
     trap("INT") {system('stty', @stty_save); exit}
   end
@@ -197,19 +258,13 @@ class BaiduYunCLI
   end
 
   def ls(path = nil)
-    api_run(:file_list, :path => path || relative_path )
+    super
     on_success{  format_list_output(@res)  }
   end
 
   def lcd(path)
-    @lpwd = absolute_path(path, @lpwd)
+    super
     puts "Local working directory changed to: #{@lpwd}"
-  end
-
-  def cd(path)
-    path = absolute_path(path, @pwd)
-    # going above root dir is not allowed
-    @pwd = path >= APP_ROOT_DIR ? path : APP_ROOT_DIR
   end
 
   def pwd
@@ -218,7 +273,7 @@ class BaiduYunCLI
   end
 
   def quota
-    api_run(:quota_info)
+    super
     on_success do
       puts "QUOTA:  #{format_size @res[:quota] }"
       puts "USED:   #{format_size @res[:used] }"
@@ -226,7 +281,7 @@ class BaiduYunCLI
   end
 
   def cp(from, to)
-    api_run(:file_copy, :from => absolute_path(from), :to => absolute_path(to))
+    super
     on_success{
       @res[:extra][:list].each do |i|
         puts "COPY: " +  i[:from] + "  =>  " + i[:to]
@@ -236,18 +291,11 @@ class BaiduYunCLI
 
   # here the batch delete API is used for speed
   def rm(*path)
-    api_run(:file_delete,
-            :form => { :param => {:list => path.map{|f| {:path => absolute_path(f) }}}.to_json }  )
-    on_success{ nil }
+    super; on_success{ nil }
   end
 
   def find(wd, path = '.')
-    api_run(:file_search, path: path, wd: wd, re: "1")
-    on_success{ format_list_output(@res) }
-  end
-
-  def debug(status = 'on')
-    @api.logger = Logger.new( status == 'on' ? STDOUT : "/dev/null" )
+    super; on_success{ format_list_output(@res) }
   end
 
   def history
@@ -268,29 +316,12 @@ class BaiduYunCLI
     Readline::HISTORY.push(* open(SESSION_LOG).readlines.map(&:chomp) )   if File.file? SESSION_LOG
   end
 
-  def api_run(method, *opts, **kwds)
-    @res = @api.run(method, *opts, **kwds)
-  end
-
   def on_success
     unless @res[:error_code]
       yield
     else
       puts "Error: [#{@res[:error_code]}] #{@res[:error_msg]}"
     end
-  end
-
-  # find path relative to "to" address
-  def relative_path(path = @pwd, to = APP_ROOT_DIR)
-    Pathname.new(path).relative_path_from(Pathname.new(to)).to_s
-  end
-
-  # find a full path
-  #   path:       a relative path or full path
-  #   reference:  reference location, i.e., pwd
-  def absolute_path(path, reference = @pwd)
-    path = File.expand_path(File.join(reference, path))  unless path.start_with? '/'
-    path
   end
 
   def prompt
