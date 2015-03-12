@@ -278,12 +278,6 @@ class BaiduYunCLI < BaiduYun
     Readline.completion_proc = @comp
     while @line = Readline.readline(prompt, true)
       case @line.strip
-      #when /^cd$/i;         cd APP_ROOT_DIR
-      #when /^[h|?]$/i;      help
-      #when /^cd\s+(.+)$/i;  cd $1
-      #when /^ls\s+(.+)$/i;  ls $1
-      #when /^q$/i;          quit       # terminate cli
-      #when /^quota$/i;      quota
       when /^([^ ]+)(?:\s+([^ ].*))?$/i;
         if methods.include? $1.to_sym
           $2 ? send($1, *(Shellwords.split($2))) : send($1)
