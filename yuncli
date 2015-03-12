@@ -237,7 +237,9 @@ class BaiduYunCLI < BaiduYun
     super
     @stty_save = `stty -g`.chomp
     trap("INT") {system('stty', @stty_save); exit}
-    @comp_list = ( BaiduYun.instance_methods(false) << :history ).map(&:to_s).sort
+    @comp_list = [BaiduYun, BaiduYunCLI].
+      map{|i| i.instance_methods(false)}.inject(&:+).map(&:to_s).sort.uniq
+    @comp_list.delete('main_loop')
     @comp = proc {|s|
       # complete command if there is no command entered
       @comp_list.grep(/^#{Regexp.escape(s)}/) unless Readline.line_buffer =~ /^.* /
