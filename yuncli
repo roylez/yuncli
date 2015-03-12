@@ -218,12 +218,22 @@ class BaiduYun
     open(File.join(@lpwd, fn), 'wb'){|f| f.puts api_run(:file_download, path: absolute_path(path)) }
   end
 
+  def mget(pattern)
+    _ls unless @file_list.key? @pwd
+    matches = @file_list[@pwd].select{|f| File.fnmatch(pattern, f)}
+    # download one by one as I am poor man
+    matches.each { |f| get(f) }
+  end
+
   def debug(status = 'on')
     @debug = ( status.downcase == 'on' )
     @api.logger = Logger.new( @debug ? STDOUT : "/dev/null" )
   end
 
   private
+
+  alias :_ls :ls
+
   def api_run(method, *opts, **kwds)
     @res = @api.run(method, *opts, **kwds)
   end
@@ -266,7 +276,7 @@ class BaiduYunCLI < BaiduYun
         @commands.grep(/^#{Regexp.escape(s)}/i)
       else
         case $1
-        when /cp|mv|get/;
+        when /^(cp|mv|get)/;
           @file_list[@pwd].grep(/^#{Regexp.escape(s)}/i)  if @file_list.key? @pwd
         end
       end
@@ -349,8 +359,9 @@ class BaiduYunCLI < BaiduYun
   end
 
   def get(path)
-    fn = File.basename(path)
-    open(File.join(@lpwd, fn), 'wb'){|f| f.puts api_run(:file_download, path: absolute_path(path)) }
+    super
+    # on_success could not be used here because there is no return code
+    puts "Download completed: #{path}"
   end
 
   # here the batch delete API is used for speed
@@ -375,11 +386,15 @@ class BaiduYunCLI < BaiduYun
 
   def auto_server
     # an ugly way to call a super method that is overridden
-    BaiduYun.instance_method(:servers).bind(self).call
+    super_method(:servers).call
     on_success{ @api.server @res[:host] }
   end
 
   private
+
+  def super_method(method)
+    BaiduYun.instance_method(method).bind(self)
+  end
 
   def save_history
     if @line =~ /^\s*$/ or Readline::HISTORY.to_a[-2] == @line
