@@ -9,6 +9,7 @@ require 'readline'
 require 'logger'
 require 'shellwords'
 require 'pathname'
+require 'typhoeus' rescue STDERR.puts "Typhoeus not found, downloading of big files will fail."
 #require 'pry-byebug'
 
 APP_NAME     = 'bypy'
@@ -21,33 +22,52 @@ SESSION_LOG  = File.expand_path("~/.baiduyun.log")
 PCS_BASE_URI = 'https://pcs.baidu.com/rest/2.0/pcs/'
 PCS_PREFIX   = '/rest/2.0/pcs/'
 PCS_METHODS = {
-  :quota_info                      => :GET,
-  :file_upload                     => :POST,
-  :file_download                   => :GET,
-  :file_createsuperfile            => :POST,
-  :file_mkdir                      => :POST,
-  :file_meta                       => :GET,
-  :file_list                       => :GET,
-  :file_move                       => :POST,
-  :file_copy                       => :POST,
-  :file_delete                     => :POST,
-  :file_search                     => :GET,
-  :file_diff                       => :GET,
-  :file_streaming                  => :GET,
-  :thunmbnail_generate             => :GET,
-  :"services/cloud_dl|list_task"   => :POST,
-  :"services/cloud_dl|query_task"  => :POST,
-  :"services/cloud_dl|add_task"    => :POST,
-  :"services/cloud_dl|cancel_task" => :POST,
+  :quota_info                      => :get,
+  :file_upload                     => :post,
+  :file_download                   => :get,
+  :file_createsuperfile            => :post,
+  :file_mkdir                      => :post,
+  :file_meta                       => :get,
+  :file_list                       => :get,
+  :file_move                       => :post,
+  :file_copy                       => :post,
+  :file_delete                     => :post,
+  :file_search                     => :get,
+  :file_diff                       => :get,
+  :file_streaming                  => :get,
+  :thunmbnail_generate             => :get,
+  :"services/cloud_dl|list_task"   => :post,
+  :"services/cloud_dl|query_task"  => :post,
+  :"services/cloud_dl|add_task"    => :post,
+  :"services/cloud_dl|cancel_task" => :post,
 }
 
-# This class defines connectivity level stuff
-class BaiduYunConn
-  attr_accessor :logger
-  def initialize
-    server PCS_BASE_URI
+module TyphoeusConnection
+  def server(uri = nil)
+    return @server unless uri
+    @server = uri.start_with?('http') ? uri : ("https://" + uri)
+    @server = @server[%r{https://[^/]+}]
+    log.info "Server set to: #{@server}"
+    @server
   end
 
+  def request(uri, params = {}, body = {})
+    request_method = params.delete(:request) || :get
+    log.info(request_method) { uri }
+    log.info(request_method) { "PARAMS: #{params}" }
+    log.info(request_method) { "FORM: #{body}" } unless body.empty?
+
+    uri = server + '/' + uri unless uri.start_with? 'http'
+    request = Typhoeus::Request.new uri,
+                                    method: request_method,
+                                    params: params,
+                                    body:   body
+    request.run
+    request.response
+  end
+end   if defined? Typhoeus
+
+module NetHTTPConnection
   def server(server_uri = nil)
     return @server unless server_uri
     server_uri = "https://" + server_uri  unless server_uri.start_with? 'http'
@@ -56,6 +76,52 @@ class BaiduYunConn
     @http.use_ssl = true
     log.info "Server set to: #{@server.host}"
     @server
+  end
+
+  # uri:
+  #   /foo/bar    partial uri, method will continue to use @http set with
+  #               BaiduYunConn#server method
+  #   htt://foo   a full uri. @http will be reset by invoking #server method
+  #
+  # params:
+  #   :request    request method GET/POST/ETC     default :get
+  #   :params     query data
+  #   :body       request data to be embeded in request body, ie. post form
+  def request(uri, params = {}, body = {})
+    request_method = params.delete(:request) || :get
+    log.info(request_method) { uri }
+    log.info(request_method) { "PARAMS: #{params}" }
+    if uri.start_with? 'http'
+      uri = server(uri).request_uri   # create @http to match uri
+    end
+    case request_method
+    when :get
+      request_uri = full_uri(uri, params)
+      request     = Net::HTTP::Get.new(request_uri)
+    when :post
+      request_uri       = full_uri(uri, params)
+      request           = Net::HTTP::Post.new(request_uri)
+      request.form_data = body
+      log.info(:post) { "FORM: #{body}"}
+    end
+    @http.request(request)
+  end
+
+  private
+
+  def full_uri(base_uri, params)
+    params.empty? ? base_uri : ( base_uri + '?' + URI.encode_www_form(params) )
+  end
+
+end
+
+# This class defines connectivity level stuff
+class BaiduYunConn
+  attr_accessor :logger
+  include defined?(Typhoeus) ? TyphoeusConnection : NetHTTPConnection
+
+  def initialize
+    server PCS_BASE_URI
   end
 
   def authenticate
@@ -77,16 +143,16 @@ class BaiduYunConn
     @token = res[:access_token]
   end
 
-  def run(cmd, params = {})
+  def run(cmd, params = {}, body = {})
     authenticate_first
     params[:access_token] = @token
     service, method = split_command(cmd.to_s)
 
     [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
 
-    args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :GET )
+    args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
 
-    request_json(PCS_PREFIX + service, args)
+    request_json(PCS_PREFIX + service, args, body )
   end
 
   def authenticate_first
@@ -131,12 +197,8 @@ class BaiduYunConn
     path
   end
 
-  def full_uri(base_uri, params)
-    params.empty? ? base_uri : ( base_uri + '?' + URI.encode_www_form(params) )
-  end
-
-  def request_json(uri, params = {})
-    req  = request(uri, params)
+  def request_json(uri, params = {}, body = {})
+    req  = request(uri, params, body)
     body = req.body
     log.info(:RESPONSE) { params[:method] == 'download' ? "-- FILE CONTENT --" : body }
     JSON.parse(body, :symbolize_names => true)
@@ -144,35 +206,6 @@ class BaiduYunConn
     body
   end
 
-  # uri:
-  #   /foo/bar    partial uri, method will continue to use @http set with
-  #               BaiduYunConn#server method
-  #   htt://foo   a full uri. @http will be reset by invoking #server method
-  #
-  # params:
-  #   :request    request method GET/POST/ETC     default :GET
-  #   :form       POST data form                  defualt { }
-  #   ....        query data
-  def request(uri, params = {})
-    request_method = params.delete(:request) || :GET
-    log.info(request_method) { uri }
-    log.info(request_method) { "PARAMS: #{params}" }
-    if uri.start_with? 'http'
-      uri = server(uri).request_uri   # create @http to match uri
-    end
-    case request_method
-    when :GET
-      request_uri = full_uri(uri, params)
-      request     = Net::HTTP::Get.new(request_uri)
-    when :POST
-      form_data         = params.delete(:form) || { }
-      request_uri       = full_uri(uri, params)
-      request           = Net::HTTP::Post.new(request_uri)
-      request.form_data = form_data
-      log.info(:POST) { "FORM: #{form_data}"}
-    end
-    @http.request(request)
-  end
 end
 
 # API level stuff defined here
@@ -218,7 +251,8 @@ class BaiduYun
 
   def rm(*path)
     api_run(:file_delete,
-            :form => { :param => {:list => path.map{|f| {:path => absolute_path(f) }}}.to_json }  )
+            { },
+            { :param => {:list => path.map{|f| {:path => absolute_path(f) }}}.to_json }  )
   end
 
   def find(wd, path = '.')
@@ -226,8 +260,14 @@ class BaiduYun
   end
 
   def get(path)
-    fn = File.basename(path)
-    open(File.join(@lpwd, fn), 'wb'){|f| f.puts api_run(:file_download, path: absolute_path(path)) }
+    fn     = File.basename(path)
+    f      = open(File.join(@lpwd, fn), 'wb')
+    f.sync = true
+    #http://stackoverflow.com/questions/2263540/how-do-i-download-a-binary-file-over-http
+    api_run(:file_download, path: absolute_path(path)) do |resp|
+      resp.read_body {|segment| f << segment; sleep 0.005 }
+    end
+    f.close
   end
 
   def mget(pattern)
