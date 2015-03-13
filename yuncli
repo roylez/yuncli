@@ -131,7 +131,7 @@ class BaiduYunConn
       redirect_uri:  'oob',
       scope:         'basic netdisk'
     }
-    auth_url = full_uri(AUTH_API_URL, params)
+    auth_url = AUTH_API_URL + '?' + URI.encode_www_form(params)
     puts "Please visit the following address and copy authentication token:"
     puts; puts auth_url; puts
     print "Please enter token and press ENTER: "
