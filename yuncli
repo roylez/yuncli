@@ -341,7 +341,7 @@ class BaiduYunCLI < BaiduYun
         case $1
         when /^(cp|mv|get|rm)/
           files.map(&:first).grep(/^#{Regexp.escape(s)}/i)  if files
-        when /^cd/
+        when /^(cd|ls)/
           files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
         end
       end
