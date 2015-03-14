@@ -12,16 +12,17 @@ require 'pathname'
 require 'typhoeus' rescue STDERR.puts "Typhoeus not found, downloading of big files will fail."
 #require 'pry-byebug'
 
-APP_NAME     = 'bypy'
-APP_ROOT_DIR = File.join("/apps/", APP_NAME)
-API_KEY      = 'q8WE4EpCsau1oS0MplgMKNBn'
-AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
-AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
-SESSION_FILE = File.expand_path('~/.baiduyun')
-SESSION_LOG  = File.expand_path("~/.baiduyun.log")
-PCS_BASE_URI = 'https://pcs.baidu.com/rest/2.0/pcs/'
-PCS_PREFIX   = '/rest/2.0/pcs/'
-PCS_METHODS = {
+APP_NAME         = 'bypy'
+APP_ROOT_DIR     = File.join("/apps/", APP_NAME)
+API_KEY          = 'q8WE4EpCsau1oS0MplgMKNBn'
+AUTH_API_URL     = "https://openapi.baidu.com/oauth/2.0/authorize"
+AUTH_SERV        = 'https://bypy-tianze.rhcloud.com/auth'
+SESSION_FILE     = File.expand_path('~/.baiduyun')
+SESSION_LOG      = File.expand_path("~/.baiduyun.log")
+PCS_BASE_URI     = 'https://pcs.baidu.com/rest/2.0/pcs/'
+BAIDU_USER_AGENT = 'netdisk;4.6.4.1;PC;PC-Windows;6.3.9600;WindowsBaiduYunGuanJia'
+PCS_PREFIX       = '/rest/2.0/pcs/'
+PCS_METHODS      = {
   :quota_info                      => :get,
   :file_upload                     => :post,
   :file_download                   => :get,
@@ -58,10 +59,12 @@ module TyphoeusConnection
     log.info(request_method) { "FORM: #{body}" } unless body.empty?
 
     uri = server + '/' + uri unless uri.start_with? 'http'
+    headers = request_to_baidu? ? {'User-Agent' => BAIDU_USER_AGENT } : { }
     request = Typhoeus::Request.new uri,
                                     method: request_method,
                                     params: params,
-                                    body:   body
+                                    body:   body,
+                                    headers: headers
     request.run
     request.response
   end
@@ -104,6 +107,7 @@ module NetHTTPConnection
       request.form_data = body
       log.info(:post) { "FORM: #{body}"}
     end
+    request.initialize_http_header("User-Agent" => BAIDU_USER_AGENT)  if request_to_baidu?
     @http.request(request)
   end
 
@@ -168,6 +172,10 @@ class BaiduYunConn
   end
 
   private
+
+  def request_to_baidu?
+    server =~ /\.(baidu|baidupcs)\.com/
+  end
 
   def split_command(cmd)
     cmd.include?('|') ? cmd.split('|') : cmd.split('_')
@@ -260,14 +268,15 @@ class BaiduYun
   end
 
   def get(path)
-    fn     = File.basename(path)
-    f      = open(File.join(@lpwd, fn), 'wb')
-    f.sync = true
+    fn      = File.basename(path)
     #http://stackoverflow.com/questions/2263540/how-do-i-download-a-binary-file-over-http
     api_run(:file_download, path: absolute_path(path)) do |resp|
+      raise "Error: 文件已被墙"  if resp['Content-Length'] == '1'
+      f = open(File.join(@lpwd, fn), 'wb')
       resp.read_body {|segment| f << segment; sleep 0.005 }
+      f.close
     end
-    f.close
+    true
   end
 
   def mget(pattern)
@@ -430,6 +439,8 @@ class BaiduYunCLI < BaiduYun
     super
     # on_success could not be used here because there is no return code
     puts "Download completed: #{path}"
+  rescue => e
+    puts e
   end
 
   # here the batch delete API is used for speed
