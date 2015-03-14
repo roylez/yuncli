@@ -9,7 +9,7 @@ require 'readline'
 require 'logger'
 require 'shellwords'
 require 'pathname'
-require 'typhoeus' rescue STDERR.puts "Typhoeus not found, downloading of big files will fail."
+#require 'typhoeus' rescue nil
 #require 'pry-byebug'
 
 APP_NAME         = 'bypy'
@@ -90,7 +90,7 @@ module NetHTTPConnection
   #   :request    request method GET/POST/ETC     default :get
   #   :params     query data
   #   :body       request data to be embeded in request body, ie. post form
-  def request(uri, params = {}, body = {})
+  def request(uri, params = {}, body = {}, &block)
     request_method = params.delete(:request) || :get
     log.info(request_method) { uri }
     log.info(request_method) { "PARAMS: #{params}" }
@@ -108,7 +108,7 @@ module NetHTTPConnection
       log.info(:post) { "FORM: #{body}"}
     end
     request.initialize_http_header("User-Agent" => BAIDU_USER_AGENT)  if request_to_baidu?
-    @http.request(request)
+    block_given? ? @http.request(request, &block) : @http.request(request)
   end
 
   private
@@ -147,7 +147,7 @@ class BaiduYunConn
     @token = res[:access_token]
   end
 
-  def run(cmd, params = {}, body = {})
+  def run(cmd, params = {}, body = {}, &block)
     authenticate_first
     params[:access_token] = @token
     service, method = split_command(cmd.to_s)
@@ -156,7 +156,11 @@ class BaiduYunConn
 
     args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
 
-    request_json(PCS_PREFIX + service, args, body )
+    if block_given?
+      request(PCS_PREFIX + service, args, body, &block)
+    else
+      request_json(PCS_PREFIX + service, args, body)
+    end
   end
 
   def authenticate_first
@@ -206,9 +210,8 @@ class BaiduYunConn
   end
 
   def request_json(uri, params = {}, body = {})
-    req  = request(uri, params, body)
-    body = req.body
-    log.info(:RESPONSE) { params[:method] == 'download' ? "-- FILE CONTENT --" : body }
+    response = request(uri, params, body)
+    body = response.body
     JSON.parse(body, :symbolize_names => true)
   rescue JSON::ParserError
     body
@@ -268,15 +271,17 @@ class BaiduYun
   end
 
   def get(path)
-    fn      = File.basename(path)
+    fn = File.basename(path)
     #http://stackoverflow.com/questions/2263540/how-do-i-download-a-binary-file-over-http
     api_run(:file_download, path: absolute_path(path)) do |resp|
-      raise "Error: 文件已被墙"  if resp['Content-Length'] == '1'
-      f = open(File.join(@lpwd, fn), 'wb')
-      resp.read_body {|segment| f << segment; sleep 0.005 }
-      f.close
+      return [ false, "文件已被墙" ]  if resp['Content-Length'] == '1'
+      open(File.join(@lpwd, fn), 'wb') do |f|
+        resp.read_body {|segment| f << segment; sleep 0.005 }
+      end
     end
-    true
+    [ true, :ok ]
+  rescue => e
+    [false, e.to_s ]
   end
 
   def mget(pattern)
@@ -307,8 +312,10 @@ class BaiduYun
     @files.fetch(@pwd, nil)
   end
 
-  def api_run(method, *opts, **kwds)
-    @res = @api.run(method, *opts, **kwds)
+  # the block here will be passed all the way down to the respond object
+  #
+  def api_run(method, *opts, **kwds, &block)
+    @res = @api.run(method, *opts, **kwds, &block)
   end
 
   # find path relative to "to" address
@@ -436,11 +443,9 @@ class BaiduYunCLI < BaiduYun
   end
 
   def get(path)
-    super
+    success, reason = super
     # on_success could not be used here because there is no return code
-    puts "Download completed: #{path}"
-  rescue => e
-    puts e
+    puts( success ?  "Download completed: #{path}" : "Download failed: #{reason}" )
   end
 
   # here the batch delete API is used for speed
