@@ -289,9 +289,10 @@ class BaiduYun
 
   def put(file)
     fn = File.basename(file)
+    # Carveat, in body params, pass read() to a file handler could cause problem
     api_run(:file_upload,
             { path: absolute_path(fn), ondup: 'overwrite' },
-            { file: open(file).read })
+            { file: open(file) })
   end
 
   def find(wd, path = '.')
@@ -386,15 +387,16 @@ class BaiduYunCLI < BaiduYun
       unless Readline.line_buffer =~ /^(.*?) /
         cli_commands.grep(/^#{Regexp.escape(s)}/i)
       else
-        if files
-          selected = case $1
-                     when /^(cp|mv|get|rm)/
-                       files.map(&:first).grep(/^#{Regexp.escape(s)}/i)
-                     when /^(cd|ls)/
-                       files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i)
-                     end
-          selected.map{|i| Shellwords.escape i }
-        end
+        selected = \
+          case $1
+          when /^(cp|mv|get|rm)/
+            files.map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
+          when /^(cd|ls)/
+            files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
+          when /^(put)/
+            Dir['*'].select{|i| File.file? i}
+          end
+        selected.map{|i| Shellwords.escape i }
       end
     }
   end
