@@ -9,8 +9,8 @@ require 'readline'
 require 'logger'
 require 'shellwords'
 require 'pathname'
-#require 'typhoeus' rescue nil
-require 'pry-byebug'
+#require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
+#require 'pry-byebug'
 
 APP_NAME         = 'bypy'
 APP_ROOT_DIR     = File.join("/apps/", APP_NAME)
@@ -52,13 +52,8 @@ module TyphoeusConnection
     @server
   end
 
-  def request(uri, params = {}, body = {})
-    uri, method, params, body, headers = request_info(uri, params, body)
-    request = Typhoeus::Request.new uri,
-                                    method:  method,
-                                    params:  params,
-                                    body:    body,
-                                    headers: headers
+  def request(uri, method, detail = {})
+    request = Typhoeus::Request.new uri, detail.merge(method: method)
     request.run
     request.response
   end
@@ -85,8 +80,7 @@ module NetHTTPConnection
   #   :request    request method GET/POST/ETC     default :get
   #   :params     query data
   #   :body       request data to be embeded in request body, ie. post form
-  def request(uri, params = {}, body = {}, &block)
-    uri, method, params, body, headers = request_info(uri, params, body)
+  def request(uri, method, detail = {}, &block)
     unless request_to_baidu?
       uri = server(uri).request_uri   # create @http to match uri
     else
@@ -95,9 +89,9 @@ module NetHTTPConnection
     request = {
       :get  => Net::HTTP::Get,
       :post => Net::HTTP::Post,
-    }[method].new(full_uri(uri, params))
-    request.form_data = body
-    request.initialize_http_header(headers)
+    }[method].new( full_uri(uri, detail.fetch(:params, {}) ) )
+    request.form_data = detail.fetch(:body, {})
+    request.initialize_http_header(detail.fetch(:headers, {}))
     block_given? ? @http.request(request, &block) : @http.request(request)
   end
 
@@ -130,7 +124,8 @@ class BaiduYunConn
     puts; puts auth_url; puts
     print "Please enter token and press ENTER: "
 
-    res = request_json(AUTH_SERV, code: STDIN.gets.chomp, redirect_uri: 'oob')
+    res = request_json(AUTH_SERV, :get,
+                       params: {code: STDIN.gets.chomp, redirect_uri: 'oob'})
 
     save_session(res)
 
@@ -146,10 +141,12 @@ class BaiduYunConn
 
     args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
 
+    uri, request_method, request_detail = request_info(PCS_PREFIX + service, args, body)
+
     if block_given?
-      request(PCS_PREFIX + service, args, body, &block)
+      request(uri, request_method, request_detail, &block)
     else
-      request_json(PCS_PREFIX + service, args, body)
+      request_json(uri, request_method, request_detail)
     end
   end
 
@@ -199,8 +196,8 @@ class BaiduYunConn
     path
   end
 
-  def request_json(uri, params = {}, body = {})
-    response = request(uri, params, body)
+  def request_json(uri, method, details = {})
+    response = request(uri, method, details)
     body = response.body
     JSON.parse(body, :symbolize_names => true)
   rescue JSON::ParserError
@@ -216,7 +213,7 @@ class BaiduYunConn
     log.info(method) { "PARAMS: #{params}" }
     log.info(method) { "FORM: #{body}" } unless body.empty?
 
-    [uri, method, params, body, header]
+    [uri, method, {params: params, body: body, headers: header}]
   end
 
 end
@@ -285,6 +282,10 @@ class BaiduYun
   rescue => e
     [false, e.to_s ]
   end
+
+  #def get_url(path)
+    #api_run(PCS_PREFIX + 'file', )
+  #end
 
   def mget(pattern)
     _ls unless files
