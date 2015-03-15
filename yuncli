@@ -94,19 +94,16 @@ module NetHTTPConnection
     request_method = params.delete(:request) || :get
     log.info(request_method) { uri }
     log.info(request_method) { "PARAMS: #{params}" }
+    log.info(request_method) { "BODY: #{body}"}   unless body.empty?
     if uri.start_with? 'http'
       uri = server(uri).request_uri   # create @http to match uri
     end
-    case request_method
-    when :get
-      request_uri = full_uri(uri, params)
-      request     = Net::HTTP::Get.new(request_uri)
-    when :post
-      request_uri       = full_uri(uri, params)
-      request           = Net::HTTP::Post.new(request_uri)
-      request.form_data = body
-      log.info(:post) { "FORM: #{body}"}
-    end
+    request_uri = full_uri(uri, params)
+    request = {
+      :get  => Net::HTTP::Get,
+      :post => Net::HTTP::Post,
+    }[request_method].new(request_uri)
+    request.form_data = body
     request.initialize_http_header("User-Agent" => BAIDU_USER_AGENT)  if request_to_baidu?
     block_given? ? @http.request(request, &block) : @http.request(request)
   end
