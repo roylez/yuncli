@@ -10,7 +10,7 @@ require 'logger'
 require 'shellwords'
 require 'pathname'
 #require 'typhoeus' rescue nil
-#require 'pry-byebug'
+require 'pry-byebug'
 
 APP_NAME         = 'bypy'
 APP_ROOT_DIR     = File.join("/apps/", APP_NAME)
@@ -53,17 +53,11 @@ module TyphoeusConnection
   end
 
   def request(uri, params = {}, body = {})
-    request_method = params.delete(:request) || :get
-    log.info(request_method) { uri }
-    log.info(request_method) { "PARAMS: #{params}" }
-    log.info(request_method) { "FORM: #{body}" } unless body.empty?
-
-    uri = server + '/' + uri unless uri.start_with? 'http'
-    headers = request_to_baidu? ? {'User-Agent' => BAIDU_USER_AGENT } : { }
+    uri, method, params, body, headers = request_info(uri, params, body)
     request = Typhoeus::Request.new uri,
-                                    method: request_method,
-                                    params: params,
-                                    body:   body,
+                                    method:  method,
+                                    params:  params,
+                                    body:    body,
                                     headers: headers
     request.run
     request.response
@@ -74,10 +68,11 @@ module NetHTTPConnection
   def server(server_uri = nil)
     return @server unless server_uri
     server_uri = "https://" + server_uri  unless server_uri.start_with? 'http'
-    @server = URI(server_uri)
-    @http = Net::HTTP.new(@server.host, @server.port)
+    @server = server_uri[%r{https://[^/]+}]
+    u       = URI(@server)
+    @http   = Net::HTTP.new(u.host, u.port)
     @http.use_ssl = true
-    log.info "Server set to: #{@server.host}"
+    log.info "Server set to: #{@server}"
     @server
   end
 
@@ -91,20 +86,18 @@ module NetHTTPConnection
   #   :params     query data
   #   :body       request data to be embeded in request body, ie. post form
   def request(uri, params = {}, body = {}, &block)
-    request_method = params.delete(:request) || :get
-    log.info(request_method) { uri }
-    log.info(request_method) { "PARAMS: #{params}" }
-    log.info(request_method) { "BODY: #{body}"}   unless body.empty?
-    if uri.start_with? 'http'
+    uri, method, params, body, headers = request_info(uri, params, body)
+    unless request_to_baidu?
       uri = server(uri).request_uri   # create @http to match uri
+    else
+      uri = URI(uri).request_uri
     end
-    request_uri = full_uri(uri, params)
     request = {
       :get  => Net::HTTP::Get,
       :post => Net::HTTP::Post,
-    }[request_method].new(request_uri)
+    }[method].new(full_uri(uri, params))
     request.form_data = body
-    request.initialize_http_header("User-Agent" => BAIDU_USER_AGENT)  if request_to_baidu?
+    request.initialize_http_header(headers)
     block_given? ? @http.request(request, &block) : @http.request(request)
   end
 
@@ -199,7 +192,7 @@ class BaiduYunConn
     open(SESSION_FILE, 'w') {|f| f.puts session_detail.to_json }
   end
 
-  def log; @logger ||= Logger.new(STDOUT); end
+  def log; @logger ||= Logger.new(STDOUT) ; end
 
   def full_path(path)
     path = File.expand_path(File.join(APP_ROOT_DIR, path))   unless path.start_with? '/'
@@ -212,6 +205,18 @@ class BaiduYunConn
     JSON.parse(body, :symbolize_names => true)
   rescue JSON::ParserError
     body
+  end
+
+  def request_info(uri, params = {}, body = {})
+    method = params.delete(:request) || :get
+    uri    = URI.join(server, uri).to_s unless uri.start_with? 'http'
+    header = request_to_baidu? ? {'User-Agent' => BAIDU_USER_AGENT } : { }
+
+    log.info(method) { uri }
+    log.info(method) { "PARAMS: #{params}" }
+    log.info(method) { "FORM: #{body}" } unless body.empty?
+
+    [uri, method, params, body, header]
   end
 
 end
