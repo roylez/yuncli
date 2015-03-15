@@ -127,7 +127,7 @@ class BaiduYunConn
   end
 
   def run(cmd, params = {}, body = {}, &block)
-    uri, request_method, request_detail = run_to_url(cmd, params, body)
+    uri, request_method, request_detail = cmd_to_url(cmd, params, body)
 
     if block_given?
       request(uri, request_method, request_detail, &block)
@@ -136,7 +136,7 @@ class BaiduYunConn
     end
   end
 
-  def run_to_url(cmd, params = {}, body = {})
+  def cmd_to_url(cmd, params = {}, body = {})
     authenticate_first      # without this, there is no @token
     params[:access_token] = @token
     service, method = split_command(cmd.to_s)
@@ -287,7 +287,7 @@ class BaiduYun
 
   # get download url for a file
   def get_url(path)
-    uri, _, details = @api.run_to_url(:file_download, path: absolute_path(path))
+    uri, _, details = @api.cmd_to_url(:file_download, path: absolute_path(path))
     @api.full_uri(uri, details[:params])
   end
 
