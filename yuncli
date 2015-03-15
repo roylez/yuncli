@@ -320,6 +320,11 @@ class BaiduYun
     matches.each { |f| get(f) }
   end
 
+  def mput(pattern)
+    matches = Dir[pattern].select{|f| File.file? f }
+    matches.each {|f| put f }
+  end
+
   def mkdir(path)
     api_run(:file_mkdir, path: absolute_path(path))
   end
@@ -444,7 +449,9 @@ class BaiduYunCLI < BaiduYun
     ls [DIR]      列出文件列表
     mget PATTERN  批量下载(单线程)
     mkdir PATH    建立一个目录
+    mput PATTERN  批量上传(单线程)
     pwd           当前目录
+    put FILE      上传单个文件
     quota         容量使用信息
     rm FILE...    删除文件
     server        显示当前使用的服务器
