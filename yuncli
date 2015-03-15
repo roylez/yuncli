@@ -314,6 +314,10 @@ class BaiduYun
     matches.each { |f| get(f) }
   end
 
+  def mkdir(path)
+    api_run(:file_mkdir, path: absolute_path(path))
+  end
+
   def debug(status = 'on')
     @debug = ( status.downcase == 'on' )
     @api.logger = Logger.new( @debug ? STDOUT : "/dev/null" )
