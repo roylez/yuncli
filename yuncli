@@ -95,12 +95,6 @@ module NetHTTPConnection
     block_given? ? @http.request(request, &block) : @http.request(request)
   end
 
-  private
-
-  def full_uri(base_uri, params)
-    params.empty? ? base_uri : ( base_uri + '?' + URI.encode_www_form(params) )
-  end
-
 end
 
 # This class defines connectivity level stuff
@@ -133,15 +127,7 @@ class BaiduYunConn
   end
 
   def run(cmd, params = {}, body = {}, &block)
-    authenticate_first
-    params[:access_token] = @token
-    service, method = split_command(cmd.to_s)
-
-    [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
-
-    args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
-
-    uri, request_method, request_detail = request_info(PCS_PREFIX + service, args, body)
+    uri, request_method, request_detail = run_to_url(cmd, params, body)
 
     if block_given?
       request(uri, request_method, request_detail, &block)
@@ -150,11 +136,27 @@ class BaiduYunConn
     end
   end
 
+  def run_to_url(cmd, params = {}, body = {})
+    authenticate_first      # without this, there is no @token
+    params[:access_token] = @token
+    service, method = split_command(cmd.to_s)
+
+    [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
+
+    args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
+
+    request_info(PCS_PREFIX + service, args, body)
+  end
+
   def authenticate_first
     unless @token or load_session
       authenticate
       server PCS_BASE_URI
     end
+  end
+
+  def full_uri(base_uri, params)
+    params.empty? ? base_uri : ( base_uri + '?' + URI.encode_www_form(params) )
   end
 
   # PCS functions starts here...
@@ -283,9 +285,11 @@ class BaiduYun
     [false, e.to_s ]
   end
 
-  #def get_url(path)
-    #api_run(PCS_PREFIX + 'file', )
-  #end
+  # get download url for a file
+  def get_url(path)
+    uri, _, details = @api.run_to_url(:file_download, path: absolute_path(path))
+    @api.full_uri(uri, details[:params])
+  end
 
   def mget(pattern)
     _ls unless files
@@ -450,6 +454,8 @@ class BaiduYunCLI < BaiduYun
     # on_success could not be used here because there is no return code
     puts( success ?  "Download completed: #{path}" : "Download failed: #{reason}" )
   end
+
+  def get_url(path); puts super; end
 
   # here the batch delete API is used for speed
   def rm(*path)
