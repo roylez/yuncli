@@ -9,7 +9,7 @@ require 'readline'
 require 'logger'
 require 'shellwords'
 require 'pathname'
-#require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
+require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
 #require 'pry-byebug'
 
 APP_NAME         = 'bypy'
@@ -54,8 +54,21 @@ module TyphoeusConnection
 
   def request(uri, method, detail = {})
     request = Typhoeus::Request.new uri, detail.merge(method: method)
+    yield(request)  if block_given?
     request.run
     request.response
+  end
+
+  def download(full_path, filename)
+    run(:file_download, path: full_path) do |request|
+      f = File.open(filename, 'wb')
+      request.on_headers do |resp|
+        raise "文件已被墙"  if resp.headers['Content-Length'] == '1'
+      end
+      request.on_body {|chunk| f.write(chunk) }
+      request.on_complete{|resp| f.close}
+    end
+    [true, :ok]
   end
 end   if defined? Typhoeus
 
@@ -95,6 +108,15 @@ module NetHTTPConnection
     block_given? ? @http.request(request, &block) : @http.request(request)
   end
 
+  def download(full_path, filename)
+    run(:file_download, path: full_path) do |resp|
+      return [ false, "文件已被墙" ]  if resp['Content-Length'] == '1'
+      open(filename, 'wb') do |f|
+        resp.read_body {|segment| f << segment; sleep 0.005 }
+      end
+    end
+    [ true, :ok ]
+  end
 end
 
 # This class defines connectivity level stuff
@@ -160,9 +182,9 @@ class BaiduYunConn
   end
 
   # PCS functions starts here...
-  def method_missing(method, *opts, **kwds)
-    send(:run, method, *opts, **kwds)
-  end
+  #def method_missing(method, *opts, **kwds)
+    #send(:run, method, *opts, **kwds)
+  #end
 
   private
 
@@ -274,13 +296,7 @@ class BaiduYun
   def get(path)
     fn = File.basename(path)
     #http://stackoverflow.com/questions/2263540/how-do-i-download-a-binary-file-over-http
-    api_run(:file_download, path: absolute_path(path)) do |resp|
-      return [ false, "文件已被墙" ]  if resp['Content-Length'] == '1'
-      open(File.join(@lpwd, fn), 'wb') do |f|
-        resp.read_body {|segment| f << segment; sleep 0.005 }
-      end
-    end
-    [ true, :ok ]
+    @api.download(absolute_path(path), File.join(@lpwd, fn))
   rescue => e
     [false, e.to_s ]
   end
