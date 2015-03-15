@@ -52,8 +52,8 @@ module TyphoeusConnection
     @server
   end
 
-  def request(uri, method, detail = {})
-    request = Typhoeus::Request.new uri, detail.merge(method: method)
+  def request(uri, detail = {})
+    request = Typhoeus::Request.new uri, detail
     yield(request)  if block_given?
     request.run
     request.response
@@ -93,7 +93,7 @@ module NetHTTPConnection
   #   :request    request method GET/POST/ETC     default :get
   #   :params     query data
   #   :body       request data to be embeded in request body, ie. post form
-  def request(uri, method, detail = {}, &block)
+  def request(uri, detail = {}, &block)
     unless request_to_baidu?
       uri = server(uri).request_uri   # create @http to match uri
     else
@@ -102,7 +102,7 @@ module NetHTTPConnection
     request = {
       :get  => Net::HTTP::Get,
       :post => Net::HTTP::Post,
-    }[method].new( full_uri(uri, detail.fetch(:params, {}) ) )
+    }[detail[:method]].new( full_uri(uri, detail.fetch(:params, {}) ) )
     request.form_data = detail.fetch(:body, {})
     request.initialize_http_header(detail.fetch(:headers, {}))
     block_given? ? @http.request(request, &block) : @http.request(request)
@@ -149,13 +149,9 @@ class BaiduYunConn
   end
 
   def run(cmd, params = {}, body = {}, &block)
-    uri, request_method, request_detail = cmd_to_url(cmd, params, body)
+    uri, detail = cmd_to_url(cmd, params, body)
 
-    if block_given?
-      request(uri, request_method, request_detail, &block)
-    else
-      request_json(uri, request_method, request_detail)
-    end
+    block_given? ?  request(uri, detail, &block) : request_json(uri, detail)
   end
 
   def cmd_to_url(cmd, params = {}, body = {})
@@ -220,10 +216,12 @@ class BaiduYunConn
     path
   end
 
-  def request_json(uri, method, details = {})
-    response = request(uri, method, details)
+  def request_json(uri, details = {})
+    response = request(uri, details)
     body = response.body
-    JSON.parse(body, :symbolize_names => true)
+    res = JSON.parse(body, :symbolize_names => true)
+    logger.info(:RESPONSE) { res.inspect }
+    res
   rescue JSON::ParserError
     body
   end
@@ -235,9 +233,8 @@ class BaiduYunConn
 
     log.info(method) { uri }
     log.info(method) { "PARAMS: #{params}" }
-    log.info(method) { "FORM: #{body}" } unless body.empty?
 
-    [uri, method, {params: params, body: body, headers: header}]
+    [uri, {method: method, params: params, body: body, headers: header}]
   end
 
 end
@@ -289,6 +286,13 @@ class BaiduYun
             { :param => {:list => path.map{|f| {:path => absolute_path(f) }}}.to_json }  )
   end
 
+  def put(file)
+    fn = File.basename(file)
+    api_run(:file_upload,
+            { path: absolute_path(fn), ondup: 'overwrite' },
+            { file: open(file).read })
+  end
+
   def find(wd, path = '.')
     api_run(:file_search, path: path, wd: wd, re: "1")
   end
@@ -303,7 +307,7 @@ class BaiduYun
 
   # get download url for a file
   def get_url(path)
-    uri, _, details = @api.cmd_to_url(:file_download, path: absolute_path(path))
+    uri, details = @api.cmd_to_url(:file_download, path: absolute_path(path))
     @api.full_uri(uri, details[:params])
   end
 
