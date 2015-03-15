@@ -308,7 +308,7 @@ class BaiduYun
   end
 
   # get download url for a file
-  def get_url(path)
+  def url(path)
     uri, details = @api.cmd_to_url(:file_download, path: absolute_path(path))
     @api.full_uri(uri, details[:params])
   end
@@ -394,7 +394,7 @@ class BaiduYunCLI < BaiduYun
       else
         selected = \
           case $1
-          when /^(cp|mv|get|rm)/
+          when /^(cp|mv|get|rm|url)/
             files.map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
           when /^(cd|ls)/
             files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
@@ -433,7 +433,7 @@ class BaiduYunCLI < BaiduYun
   end
 
   def help
-    puts <<-HELP
+    puts <<-HELPDOC
     help          显示本帮助
     auto_server   自动选择最快的服务器
     cd            更改服务器目录
@@ -443,7 +443,7 @@ class BaiduYunCLI < BaiduYun
     dl            查看离线下载列表
     find FILE     递归在当前目录查找文件
     get FILE      下载单个文件
-    get_url FILE  打印单个文件的下载链接
+    url FILE      打印单个文件的下载链接
     history       历史命令
     lcd           切换本地目录
     ls [DIR]      列出文件列表
@@ -457,7 +457,7 @@ class BaiduYunCLI < BaiduYun
     server        显示当前使用的服务器
     servers       显示可以使用的服务器列表
     quit          退出
-    HELP
+    HELPDOC
   end
 
   def ls(path = nil)
@@ -494,7 +494,7 @@ class BaiduYunCLI < BaiduYun
     puts( success ?  "Download completed: #{path}" : "Download failed: #{reason}" )
   end
 
-  def get_url(path); puts super; end
+  def url(path); puts super; end
 
   # here the batch delete API is used for speed
   def rm(*path)
