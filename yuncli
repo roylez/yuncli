@@ -89,10 +89,11 @@ module NetHTTPConnection
   #               BaiduYunConn#server method
   #   htt://foo   a full uri. @http will be reset by invoking #server method
   #
-  # params:
-  #   :request    request method GET/POST/ETC     default :get
+  # detail:
+  #   :method     request method GET/POST/ETC     default :get
   #   :params     query data
   #   :body       request data to be embeded in request body, ie. post form
+  #   :headers    request header string
   def request(uri, detail = {}, &block)
     unless request_to_baidu?
       uri = server(uri).request_uri   # create @http to match uri
