@@ -368,6 +368,10 @@ class BaiduYun
     api_run(:file_mkdir, path: absolute_path(path))
   end
 
+  def mv(src, des)
+    api_run(:file_move, from: absolute_path(src), to: absolute_path(des))
+  end
+
   def debug(status = 'on')
     @debug = ( status.downcase == 'on' )
     @api.logger = Logger.new( @debug ? STDOUT : "/dev/null" )
@@ -489,6 +493,7 @@ class BaiduYunCLI < BaiduYun
     mget PATTERN  批量下载(单线程)
     mkdir PATH    建立一个目录
     mput PATTERN  批量上传(单线程)
+    mv FILE FILE  重命名一个文件或目录
     pwd           当前目录
     put FILE      上传单个文件
     quota         容量使用信息
@@ -526,6 +531,13 @@ class BaiduYunCLI < BaiduYun
       basics = @res.delete(:list).first
       @res.delete(:request_id)
       @res.merge(basics).each { |k,v| puts "#{"%12s" % k} : #{v}" }
+    end
+  end
+
+  def mv(src, desc)
+    super
+    on_success do
+      @res[:extra][:list].each { |i| puts "MOVE: " +  i[:from] + "  ->  " + i[:to] }
     end
   end
 
