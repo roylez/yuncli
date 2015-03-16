@@ -436,7 +436,7 @@ class BaiduYunCLI < BaiduYun
             files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
           when /^(put)/
             Dir['*'].select{|i| File.file? i}
-          end
+          end || [ ]
         selected.map{|i| Shellwords.escape i }
       end
     }
