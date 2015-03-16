@@ -348,6 +348,10 @@ class BaiduYun
     @api.full_uri(uri, details[:params])
   end
 
+  def meta(path)
+    api_run(:file_meta, path: absolute_path(path))
+  end
+
   def mget(pattern)
     _ls unless files
     matches = files.select{|f,dir| File.fnmatch(pattern, f) and not dir }.map(&:first)
@@ -429,7 +433,7 @@ class BaiduYunCLI < BaiduYun
       else
         selected = \
           case $1
-          when /^(cp|mv|get|rm|url)/
+          when /^(cp|mv|get|rm|url|meta)/
             files.map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
           when /^(cd|ls)/
             files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
@@ -513,6 +517,15 @@ class BaiduYunCLI < BaiduYun
     on_success do
       puts "QUOTA:  #{format_size @res[:quota] }"
       puts "USED:   #{format_size @res[:used] }"
+    end
+  end
+
+  def meta(path)
+    super
+    on_success do
+      basics = @res.delete(:list).first
+      @res.delete(:request_id)
+      @res.merge(basics).each { |k,v| puts "#{"%12s" % k} : #{v}" }
     end
   end
 
