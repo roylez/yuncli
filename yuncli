@@ -9,7 +9,7 @@ require 'readline'
 require 'logger'
 require 'shellwords'
 require 'pathname'
-require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
+#require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
 #require 'pry-byebug'
 
 APP_NAME         = 'bypy'
@@ -62,11 +62,9 @@ module TyphoeusConnection
   def download(full_path, filename)
     run(:file_download, path: full_path) do |request|
       f = File.open(filename, 'wb')
-      request.on_headers do |resp|
-        raise "文件已被墙"  if resp.headers['Content-Length'] == '1'
-      end
-      request.on_body {|chunk| f.write(chunk) }
-      request.on_complete{|resp| f.close}
+      request.on_headers  {|resp| handle_download_errors(resp.code) }
+      request.on_body     {|chunk| f.write(chunk) }
+      request.on_complete {|resp| f.close}
     end
     [true, :ok]
   end
@@ -95,28 +93,59 @@ module NetHTTPConnection
   #   :body       request data to be embeded in request body, ie. post form
   #   :headers    request header string
   def request(uri, detail = {}, &block)
+    boundary = 'AaB05x'
     unless request_to_baidu?
       uri = server(uri).request_uri   # create @http to match uri
     else
       uri = URI(uri).request_uri
     end
+    header = detail.fetch(:headers, {})
+    body   = detail.fetch(:body, {})
+    params = detail.fetch(:params, {})
     request = {
       :get  => Net::HTTP::Get,
       :post => Net::HTTP::Post,
-    }[detail[:method]].new( full_uri(uri, detail.fetch(:params, {}) ) )
-    request.form_data = detail.fetch(:body, {})
-    request.initialize_http_header(detail.fetch(:headers, {}))
+    }[detail[:method]].new( full_uri(uri, params ) )
+    if body[:file]
+      request.body, content_type = encode_body(body, params)
+      header['Content-Type'] = content_type
+    else
+      request.form_data = body
+    end
+    request.initialize_http_header(header)
     block_given? ? @http.request(request, &block) : @http.request(request)
   end
 
   def download(full_path, filename)
     run(:file_download, path: full_path) do |resp|
-      return [ false, "文件已被墙" ]  if resp['Content-Length'] == '1'
-      open(filename, 'wb') do |f|
-        resp.read_body {|segment| f << segment; sleep 0.005 }
-      end
+      handle_download_errors(resp.code)
+      open(filename, 'wb') { |f| resp.read_body {|segment| f << segment; sleep 0.005 } }
     end
     [ true, :ok ]
+  end
+
+  private
+  def encode_body(body, params)
+    boundary = 'AaB0xXx'
+    body = body.map{|k, v|
+      k == :file ? \
+        file_to_multipart(k, File.basename(params[:path]),
+                          'application/octet-stream', body[k].read)
+        : text_to_multipart(k, body[k])
+    }.map{|p| '--' + boundary + "\r\n" + p }.join
+    body << "--" + boundary + "--\r\n"
+    [ body, "multipart/form-data; boundary=#{boundary}" ]
+  end
+
+  def text_to_multipart(key,value)
+    "Content-Disposition: form-data; name=\"#{key}\"\r\n\r\n#{value}\r\n"
+  end
+
+  def file_to_multipart(key,filename,mime_type,content)
+    "Content-Disposition: form-data; name=\"#{key}\"; filename=\"#{filename}\"\r\n" +
+      "Content-Transfer-Encoding: binary\r\n" +
+      "Content-Type: #{mime_type}\r\n\r\n" +
+      "#{content}\r\n"
   end
 end
 
@@ -184,6 +213,13 @@ class BaiduYunConn
   #end
 
   private
+
+  def handle_download_errors(code)
+    case code.to_i
+    when 400,401,404;   raise "文件名错误"
+    when 302;           raise '文件已被墙'
+    end
+  end
 
   def request_to_baidu?
     server =~ /\.(baidu|baidupcs)\.com/
