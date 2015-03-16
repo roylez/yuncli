@@ -93,7 +93,6 @@ module NetHTTPConnection
   #   :body       request data to be embeded in request body, ie. post form
   #   :headers    request header string
   def request(uri, detail = {}, &block)
-    boundary = 'AaB05x'
     unless request_to_baidu?
       uri = server(uri).request_uri   # create @http to match uri
     else
