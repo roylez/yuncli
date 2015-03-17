@@ -424,6 +424,33 @@ end
 
 # This class defines CLI interactions
 class BaiduYunCLI < BaiduYun
+  HELPDOC = <<-HELPDOC
+    help          显示本帮助
+    auto_server   自动选择最快的服务器
+    cd            更改服务器目录
+    cp OLD NEW    在服务器复制文件
+    debug on      打开debug显示
+    da URL        添加离线下载
+    dl            查看离线下载列表
+    find FILE     递归在当前目录查找文件
+    get FILE      下载单个文件
+    url FILE      打印单个文件的下载链接
+    history       历史命令
+    lcd           切换本地目录
+    ls [DIR]      列出文件列表
+    mget PATTERN  批量下载(单线程)
+    mkdir PATH    建立一个目录
+    mput PATTERN  批量上传(单线程)
+    mv FILE FILE  重命名一个文件或目录
+    pwd           当前目录
+    put FILE      上传单个文件
+    quota         容量使用信息
+    rm FILE...    删除文件
+    server        显示当前使用的服务器
+    servers       显示可以使用的服务器列表
+    quit          退出
+  HELPDOC
+
   def initialize
     super
     @stty_save = `stty -g`.chomp
@@ -476,32 +503,18 @@ class BaiduYunCLI < BaiduYun
   end
 
   def help
-    puts <<-HELPDOC
-    help          显示本帮助
-    auto_server   自动选择最快的服务器
-    cd            更改服务器目录
-    cp OLD NEW    在服务器复制文件
-    debug on      打开debug显示
-    da URL        添加离线下载
-    dl            查看离线下载列表
-    find FILE     递归在当前目录查找文件
-    get FILE      下载单个文件
-    url FILE      打印单个文件的下载链接
-    history       历史命令
-    lcd           切换本地目录
-    ls [DIR]      列出文件列表
-    mget PATTERN  批量下载(单线程)
-    mkdir PATH    建立一个目录
-    mput PATTERN  批量上传(单线程)
-    mv FILE FILE  重命名一个文件或目录
-    pwd           当前目录
-    put FILE      上传单个文件
-    quota         容量使用信息
-    rm FILE...    删除文件
-    server        显示当前使用的服务器
-    servers       显示可以使用的服务器列表
-    quit          退出
-    HELPDOC
+    items        = HELPDOC.split("\n")
+    longest      = items.max_by{|i| i.width }.width
+    screen_width = `tput cols`.to_i
+    max_per_line = screen_width / ( longest + 1 )
+    leftover     = screen_width - longest * max_per_line
+    padding      = leftover / max_per_line
+    i = 0
+    while i < items.size
+      print items[i] + ' ' * (padding + longest - items[i].width)
+      i += 1
+      puts if i % max_per_line == 0
+    end
   end
 
   def ls(path = nil)
@@ -652,6 +665,16 @@ end
 class String
   def color(code)
     "\e[#{code}m" + self + "\e[m"
+  end
+
+  def contains_cjk?               # Oniguruma regex !!!
+    (self =~ /\p{Han}|\p{Katakana}|\p{Hiragana}\p{Hangul}/)
+  end
+
+  def width
+    gsub(/(\e|\033|\33)\[[;0-9]*\D/,'').split(//).inject( 0 ) do |s, i|
+      s += i.contains_cjk? ? 2 : 1
+    end
   end
 end
 
