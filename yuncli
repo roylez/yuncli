@@ -9,8 +9,7 @@ require 'readline'
 require 'logger'
 require 'shellwords'
 require 'pathname'
-#require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
-#require 'pry-byebug'
+require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
 
 APP_NAME         = 'bypy'
 APP_ROOT_DIR     = File.join("/apps/", APP_NAME)
@@ -48,7 +47,6 @@ module TyphoeusConnection
     return @server unless uri
     @server = uri.start_with?('http') ? uri : ("https://" + uri)
     @server = @server[%r{https://[^/]+}]
-    log.info "Server set to: #{@server}"
     @server
   end
 
@@ -78,7 +76,6 @@ module NetHTTPConnection
     u       = URI(@server)
     @http   = Net::HTTP.new(u.host, u.port)
     @http.use_ssl = true
-    log.info "Server set to: #{@server}"
     @server
   end
 
@@ -285,6 +282,7 @@ class BaiduYun
     @pwd   = APP_ROOT_DIR
     @lpwd  = ENV['PWD']
     @files = {}           # file listing cache for completion and etc
+    debug( ENV['DEBUG'] ? 'on' : 'off' )
   end
 
   def cd(path = nil)
@@ -386,9 +384,10 @@ class BaiduYun
     api_run(:file_move, from: absolute_path(src), to: absolute_path(des))
   end
 
-  def debug(status = 'on')
-    @debug = ( status.downcase == 'on' )
+  def debug(status = nil)
+    @debug = status.nil? ? ( not @debug ) : status.to_s == 'on'
     @api.logger = Logger.new( @debug ? STDOUT : "/dev/null" )
+    @debug
   end
 
   def dl
