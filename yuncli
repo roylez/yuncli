@@ -582,7 +582,7 @@ class BaiduYunCLI < BaiduYun
     puts Readline::HISTORY.to_a.last(10).join("\n")
   end
 
-  def server; puts super.host; end
+  def server; puts super; end
 
   def servers
     super
