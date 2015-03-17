@@ -271,6 +271,7 @@ class BaiduYunConn
 
     log.info(method) { uri }
     log.info(method) { "PARAMS: #{params}" }
+    log.info(method) { "BODY: #{body.inspect}" }  unless body.empty? or body.key? :file
 
     [uri, {method: method, params: params, body: body, headers: header}]
   end
@@ -401,6 +402,17 @@ class BaiduYun
   end
 
   private
+
+  # for joining files, might be useful SOMEDAY
+  def join(path, *src_files)
+    block_list = src_files.map{|f|
+      res = api_run(:file_meta, path: absolute_path(f))
+      JSON.parse res[:list].first[:block_list]
+    }.flatten
+    api_run :file_createsuperfile,
+            { path: absolute_path(path) },
+            { param: { block_list: block_list }.to_json }
+  end
 
   def files
     @files.fetch(@pwd, nil)
