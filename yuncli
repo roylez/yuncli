@@ -245,7 +245,9 @@ class BaiduYunConn
     open(SESSION_FILE, 'w') {|f| f.puts session_detail.to_json }
   end
 
-  def log; @logger ||= Logger.new(STDOUT) ; end
+  def log
+    @logger ||= Logger.new(STDOUT)
+  end
 
   def full_path(path)
     path = File.expand_path(File.join(APP_ROOT_DIR, path))   unless path.start_with? '/'
@@ -294,13 +296,19 @@ class BaiduYun
     api_run(:file_copy, :from => absolute_path(from), :to => absolute_path(to))
   end
 
-  def lcd(path); @lpwd = File.expand_path(path) ; end
+  def lcd(path)
+    @lpwd = File.expand_path(path)
+  end
 
   #  API found here, no doc anywhere ....
   #  https://github.com/ly0/baidupcsapi/blob/master/baidupcsapi/api.py
-  def servers; api_run(:file_locateupload); end
+  def servers
+    api_run(:file_locateupload)
+  end
 
-  def server; @api.server; end
+  def server
+    @api.server
+  end
 
   def ls(path = nil)
     path = path || relative_path
@@ -310,11 +318,16 @@ class BaiduYun
       @files[full_path] = @res[:list].map{|i| [ File.basename(i[:path]), i[:isdir] == 1 ] }
     end
   end
+
   alias :_ls :ls
 
-  def pwd; [ @pwd, @lpwd ] ; end
+  def pwd
+    [ @pwd, @lpwd ]
+  end
 
-  def quota; api_run(:quota_info); end
+  def quota
+    api_run(:quota_info)
+  end
 
   def rm(*path)
     api_run(:file_delete,
@@ -567,7 +580,9 @@ class BaiduYunCLI < BaiduYun
     puts( success ?  "Download completed: #{path}" : "Download failed: #{reason}" )
   end
 
-  def url(path); puts super; end
+  def url(path)
+    puts super
+  end
 
   # here the batch delete API is used for speed
   def rm(*path)
@@ -582,7 +597,9 @@ class BaiduYunCLI < BaiduYun
     puts Readline::HISTORY.to_a.last(10).join("\n")
   end
 
-  def server; puts super; end
+  def server
+    puts super
+  end
 
   def servers
     super
@@ -634,11 +651,13 @@ class BaiduYunCLI < BaiduYun
     end
   end
 
-  def format_field(field, record);
+  def format_field(field, record)
     send("format_#{field}", record)
   end
 
-  def format_fs_id(record); "%16s" % record; end
+  def format_fs_id(record)
+    "%16s" % record
+  end
 
   def format_mtime(record)
     t = Time.at(record)
@@ -660,6 +679,7 @@ class BaiduYunCLI < BaiduYun
     path = relative_path(record, @pwd)
     isdir == 0 ? path : path.color('34;1;4')
   end
+
 end
 
 class String
