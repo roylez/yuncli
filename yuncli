@@ -339,7 +339,7 @@ class BaiduYun
     # Carveat, in body params, pass read() to a file handler could cause problem
     api_run(:file_upload,
             { path: absolute_path(fn), ondup: 'overwrite' },
-            { file: open(file) })
+            { file: open(absolute_path(file, @lpwd)) })
   end
 
   def find(wd, path = '.')
@@ -372,8 +372,14 @@ class BaiduYun
   end
 
   def mput(pattern)
-    matches = Dir[pattern].select{|f| File.file? f }
+    matches = Dir[absolute_path(pattern, @lpwd)].select{|f| File.file? f }
     matches.each {|f| put f }
+  end
+
+  def mrm(pattern)
+    _ls unless files
+    matches = files.select{|f,dir| File.fnmatch(pattern, f) }.map(&:first)
+    matches.each { |f| rm(f) }
   end
 
   def mkdir(path)
@@ -465,6 +471,7 @@ class BaiduYunCLI < BaiduYun
     mget PATTERN  批量下载(单线程)
     mkdir PATH    建立一个目录
     mput PATTERN  批量上传(单线程)
+    mrm PATTERN   批量删除
     mv FILE FILE  重命名一个文件或目录
     pwd           当前目录
     put FILE      上传单个文件
@@ -493,7 +500,7 @@ class BaiduYunCLI < BaiduYun
           when /^(cd|ls)/
             files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
           when /^(put)/
-            Dir['*'].select{|i| File.file? i}
+            Dir["#{@lpwd}/*"].select{|i| File.file? i}
           end || [ ]
         selected.map{|i| Shellwords.escape i }
       end

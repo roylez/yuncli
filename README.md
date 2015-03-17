@@ -22,6 +22,7 @@
     mget PATTERN  批量下载(单线程)
     mkdir PATH    建立一个目录
     mput PATTERN  批量上传(单线程)
+    mrm PATTERN   批量删除
     mv FILE FILE  重命名一个文件或目录
     pwd           当前目录
     put FILE      上传单个文件
