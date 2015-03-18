@@ -162,9 +162,9 @@ class BaiduYunConn
       scope:         'basic netdisk'
     }
     auth_url = AUTH_API_URL + '?' + URI.encode_www_form(params)
-    puts "Please visit the following address and copy authentication token:"
+    puts "请访问以下网址并复制验证token: "
     puts; puts auth_url; puts
-    print "Please enter token and press ENTER: "
+    print "请输入验证token并按 ENTER 继续: "
 
     res = request_json(AUTH_SERV, :get,
                        params: {code: STDIN.gets.chomp, redirect_uri: 'oob'})
@@ -516,9 +516,9 @@ class BaiduYunCLI < BaiduYun
         if methods.include? $1.to_sym
           $2 ? send($1, *(Shellwords.split($2))) : send($1)
         else
-          puts "Invalid Command"
+          puts "无效的命令"
         end
-      else; puts "Invalid Command"
+      else; puts "无效的命令"
       end
 
       # remove empty or dupicated commands
@@ -553,7 +553,7 @@ class BaiduYunCLI < BaiduYun
   end
 
   def lcd(path)
-    super; puts "Local working directory changed to: #{@lpwd}"
+    super; puts "LOCAL: #{@lpwd}"
   end
 
   def pwd
@@ -595,7 +595,7 @@ class BaiduYunCLI < BaiduYun
   def get(path)
     success, reason = super
     # on_success could not be used here because there is no return code
-    puts( success ?  "Download completed: #{path}" : "Download failed: #{reason}" )
+    puts( success ?  "下载完成: #{path}" : "下载失败: #{reason}" )
   end
 
   def url(path)
