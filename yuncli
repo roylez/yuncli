@@ -718,5 +718,9 @@ end
 
 if __FILE__ == $0
   cli = BaiduYunCLI.new
-  cli.main_loop
+  if ARGV.empty?
+    cli.main_loop
+  else
+    cli.send(*ARGV) rescue puts '无效的命令'
+  end
 end
