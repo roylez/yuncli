@@ -379,7 +379,7 @@ class BaiduYun
   def mrm(pattern)
     _ls unless files
     matches = files.select{|f,dir| File.fnmatch(pattern, f) }.map(&:first)
-    matches.each { |f| rm(f) }
+    rm(*matches)  unless matches.empty?
   end
 
   def mkdir(path)
