@@ -296,7 +296,12 @@ class BaiduYun
   end
 
   def lcd(path)
-    @lpwd = File.expand_path(path)
+    npath = File.expand_path(path)
+    if File.directory? npath
+      @lpwd = npath
+    else
+      raise "无效的路径"
+    end
   end
 
   #  API found here, no doc anywhere ....
@@ -511,22 +516,16 @@ class BaiduYunCLI < BaiduYun
     load_history
     Readline.completion_proc = @comp
     while @line = Readline.readline(prompt, true)
-      case @line.strip
-      when /^([^ ]+)(?:\s+([^ ].*))?$/i;
-        if methods.include? $1.to_sym
-          $2 ? send($1, *(Shellwords.split($2))) : send($1)
-        else
-          puts "无效的命令"
-        end
-      else; puts "无效的命令"
-      end
-
+      dispatch_command(@line)
       # remove empty or dupicated commands
       save_history
     end
-  rescue Interrupt
-    puts "Interrupted... quitting"
-    quit
+  rescue => e
+    case e
+    when Interrupt;     puts "Interrupted... quitting"; quit
+    when ArgumentError; puts "无效的参数";              retry
+    when RuntimeError;  puts e;                         retry
+    end
   end
 
   def quit
@@ -655,6 +654,18 @@ class BaiduYunCLI < BaiduYun
 
   def load_history
     Readline::HISTORY.push(* open(SESSION_LOG).readlines.map(&:chomp).uniq )   if File.file? SESSION_LOG
+  end
+
+  def dispatch_command(string)
+    case string.strip
+    when /^([^ ]+)(?:\s+([^ ].*))?$/i;
+      if methods.include? $1.to_sym
+        $2 ? send($1, *(Shellwords.split($2))) : send($1)
+      else
+        puts "无效的命令"
+      end
+    else; puts "无效的命令"
+    end
   end
 
   def prompt
