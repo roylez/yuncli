@@ -47,6 +47,7 @@ module TyphoeusConnection
     return @server unless uri
     @server = uri.start_with?('http') ? uri : ("https://" + uri)
     @server = @server[%r{https://[^/]+}]
+    puts "当前服务器: #{@server}"
     @server
   end
 
@@ -76,6 +77,7 @@ module NetHTTPConnection
     u       = URI(@server)
     @http   = Net::HTTP.new(u.host, u.port)
     @http.use_ssl = true
+    puts "当前服务器: #{@server}"
     @server
   end
 
@@ -540,11 +542,12 @@ class BaiduYunCLI < BaiduYun
     leftover     = screen_width - longest * max_per_line
     padding      = leftover / max_per_line
     i = 0
+    puts
     while i < items.size
       print items[i] + ' ' * (padding + longest - items[i].width)
-      i += 1
-      puts if i % max_per_line == 0
+      puts if (i += 1) % max_per_line == 0
     end
+    puts
   end
 
   def ls(path = nil)
@@ -620,7 +623,7 @@ class BaiduYunCLI < BaiduYun
 
   def servers
     super
-    on_success{ @res[:server].each{|s| puts s == @res[:host] ? s + "\t(fastest)" : s } }
+    on_success{ @res[:server].each{|s| puts s == @res[:host] ? s + "\t(最快)" : s } }
   end
 
   def auto_server
@@ -664,6 +667,7 @@ class BaiduYunCLI < BaiduYun
       else
         puts "无效的命令"
       end
+    when ''; nil
     else; puts "无效的命令"
     end
   end
