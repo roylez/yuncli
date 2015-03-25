@@ -205,11 +205,6 @@ class BaiduYunConn
     params.empty? ? base_uri : ( base_uri + '?' + URI.encode_www_form(params) )
   end
 
-  # PCS functions starts here...
-  #def method_missing(method, *opts, **kwds)
-    #send(:run, method, *opts, **kwds)
-  #end
-
   private
 
   def handle_download_errors(code)
@@ -507,7 +502,7 @@ class BaiduYunCLI < BaiduYun
           when /^(cd|ls)/
             files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
           when /^(put)/
-            Dir["#{@lpwd}/*"].select{|i| File.file? i}
+            Dir["#{@lpwd}/#{s}*"].select{|i| File.file? i}.map{|i| File.basename(i)}
           end || [ ]
         selected.map{|i| Shellwords.escape i }
       end
