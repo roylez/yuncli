@@ -8,6 +8,7 @@ require 'json'
 require 'readline'
 require 'logger'
 require 'shellwords'
+require 'digest'
 require 'pathname'
 require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
 
@@ -35,6 +36,7 @@ PCS_METHODS      = {
   :file_search                     => :get,
   :file_diff                       => :get,
   :file_streaming                  => :get,
+  :file_rapidupload                => :post,
   :thunmbnail_generate             => :get,
   :"services/cloud_dl|list_task"   => :post,
   :"services/cloud_dl|query_task"  => :post,
@@ -338,10 +340,23 @@ class BaiduYun
 
   def put(file)
     fn = File.basename(file)
+    local_file = absolute_path(file, @lpwd)
+    remote_file = absolute_path(fn)
+    file_size = File.size(local_file)
+    if file_size > 262144     # > 256K try rapidupload first
+      api_run(:file_rapidupload,
+              :path             => remote_file,
+              :"content-length" => file_size,
+              :"content-md5"    => `md5sum -b #{local_file}`.split(" ").first,
+              :"content-crc32"  => `crc32 #{local_file}`.chomp,
+              :"slice-md5"      => Digest::MD5.hexdigest( IO.read(local_file, 262144) )
+             )
+      return if success?
+    end
     # Carveat, in body params, pass read() to a file handler could cause problem
     api_run(:file_upload,
-            { path: absolute_path(fn), ondup: 'overwrite' },
-            { file: open(absolute_path(file, @lpwd)) })
+            { path: remote_file, ondup: 'overwrite' },
+            { file: open(local_file) })
   end
 
   def find(wd, path = '.')
@@ -445,11 +460,11 @@ class BaiduYun
   end
 
   def on_success
-    unless @res[:error_code]
-      yield
-    else
-      puts "Error: [#{@res[:error_code]}] #{@res[:error_msg]}"
-    end
+    success? ?  yield : puts("Error: [#{@res[:error_code]}] #{@res[:error_msg]}")
+  end
+
+  def success?
+    not @res.key?(:error_code)
   end
 
 end
