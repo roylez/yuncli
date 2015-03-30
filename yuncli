@@ -299,6 +299,7 @@ class BaiduYun
     @pwd   = APP_ROOT_DIR
     @lpwd  = ENV['PWD']
     @files = {}           # file listing cache for completion and etc
+    @tasks = []           # task listing cache for completion
     debug( ENV['DEBUG'] ? 'on' : 'off' )
   end
 
@@ -435,6 +436,7 @@ class BaiduYun
 
   def dl
     api_run("services/cloud_dl|list_task")
+    @tasks = @res[:task_info].map{|i| i[:task_id]} if success?
   end
 
   def da(url)
@@ -443,6 +445,11 @@ class BaiduYun
 
   def dq(*ids)
     api_run("services/cloud_dl|query_task", task_ids: ids.map(&:to_s).join(","))
+  end
+
+  def dd(task_id)
+    api_run("services/cloud_dl|cancel_task", task_id: task_id)
+    @tasks.delete(task_id)  if success?
   end
 
   private
@@ -508,6 +515,7 @@ class BaiduYunCLI < BaiduYun
     cp OLD NEW    在服务器复制文件
     debug on      打开debug显示
     da URL        添加离线下载
+    dd ID         删除离线下载（文件不会被删除）
     dl            查看离线下载列表
     dq ID         查询下载任务
     find FILE     递归在当前目录查找文件
@@ -548,6 +556,8 @@ class BaiduYunCLI < BaiduYun
             files.select(&:last).map(&:first).grep(/^#{Regexp.escape(s)}/i) if files
           when /^(put)/
             Dir["#{@lpwd}/#{s}*"].select{|i| File.file? i}.map{|i| File.basename(i)}
+          when /^(dq|dd)/
+            @tasks.grep(/^#{s}/)
           end || [ ]
         selected.map{|i| Shellwords.escape i }
       end
@@ -607,7 +617,7 @@ class BaiduYunCLI < BaiduYun
   end
 
   def ls(path = nil)
-    super; on_success{  format_list_output(@res)  }
+    super; on_success{  format_file_list(@res)  }
   end
 
   def lcd(path)
@@ -651,8 +661,22 @@ class BaiduYunCLI < BaiduYun
   end
 
   def da(url)
+    super; on_success { puts "任务已经添加： #{@res[:task_id]}"}
+  end
+
+  def dl
+    super; on_success { format_task_list(@res) }
+  end
+
+  def dq(*ids)
     super
-    on_success { puts "任务已经添加： #{@res[:task_id]}"}
+    on_success do
+      @res[:task_info].each do |id, info|
+        percent = info[:finished_size].to_f / info[:file_size].to_i * 100
+        info.merge(:task_id => id, :completed => "%d %" % percent).
+          each {|k,v| puts "#{"%16s" % k} : #{v}"}
+      end
+    end
   end
 
   def get(path)
@@ -676,7 +700,7 @@ class BaiduYunCLI < BaiduYun
   end
 
   def find(wd, path = '.')
-    super; on_success{ format_list_output(@res) }
+    super; on_success{ format_file_list(@res) }
   end
 
   def history
@@ -738,29 +762,42 @@ class BaiduYunCLI < BaiduYun
     "度娘云".color("34;47") + ' ' + @pwd.color('32;1')  +' > '
   end
 
-  def format_list_output(res)
+  def format_file_list(res)
     res[:list].each do |f|
-      str = [:fs_id, :size, :mtime].map{|k| format_field(k, f[k]) }.join("  ")
-      str << "  " << format_path(f[:path], f[:isdir])
+      str = [:fs_id, :size, :mtime, :path].map{|k| format_field(k, f) }.join("  ")
+      puts str
+    end
+  end
+
+  def format_task_list(res)
+    res[:task_info].each do |f|
+      str = [:task_id, :source_url, :task_name].map{|k| format_field(k, f)}.join(" ")
       puts str
     end
   end
 
   def format_field(field, record)
-    send("format_#{field}", record)
+    method = "format_#{field}"
+    respond_to?(method, true) ? send(method, record) : record[field]
+  end
+
+  def format_task_name(record)
+    name = relative_path(absolute_path(record[:task_name], record[:save_path]))
+    name.color("36;1;4")
   end
 
   def format_fs_id(record)
-    "%16s" % record
+    "%16s" % record[:fs_id]
   end
 
   def format_mtime(record)
-    t = Time.at(record)
+    t = Time.at(record[:mtime])
     '['.color('33') + t.strftime("%Y-%m-%d").color('32') + ' ' +
       t.strftime("%H:%M:%S").color('35') + "]".color('33')
   end
 
-  def format_size(size)
+  def format_size(record)
+    size = record[:size]
     s = case size
         when  0..1024;               size.to_s
         when  1024..1024000;         "%.2f" % (size/1E3) + 'K'
@@ -770,9 +807,9 @@ class BaiduYunCLI < BaiduYun
     "%8s" % s
   end
 
-  def format_path(record, isdir = 0)
-    path = relative_path(record, @pwd)
-    isdir == 0 ? path : path.color('34;1;4')
+  def format_path(record)
+    path = relative_path(record[:path], @pwd)
+    record[:isdir] == 0 ? path : path.color('34;1;4')
   end
 
 end
