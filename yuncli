@@ -711,7 +711,7 @@ class BaiduYunCLI < BaiduYun
   end
 
   def prompt
-    "BaiduYun".color("34;47") + ' ' + @pwd.color('32;1')  +' > '
+    "度娘云".color("34;47") + ' ' + @pwd.color('32;1')  +' > '
   end
 
   def format_list_output(res)
