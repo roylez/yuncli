@@ -176,8 +176,7 @@ class BaiduYunConn
     puts; puts auth_url; puts
     print "请输入验证token并按 ENTER 继续: "
 
-    res = request_json(AUTH_SERV, :get,
-                       params: {code: STDIN.gets.chomp, redirect_uri: 'oob'})
+    res = request_json(AUTH_SERV, params: {code: STDIN.gets.chomp, redirect_uri: 'oob'})
 
     save_session(res)
 
