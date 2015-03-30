@@ -316,7 +316,7 @@ class BaiduYun
   def ls(path = nil)
     path = path || relative_path
     api_run(:file_list, :path => path)
-    on_success do
+    if success?
       full_path = absolute_path(path, APP_ROOT_DIR)
       @files[full_path] = @res[:list].map{|i| [ File.basename(i[:path]), i[:isdir] == 1 ] }
     end
