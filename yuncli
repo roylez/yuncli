@@ -19,7 +19,7 @@ AUTH_API_URL     = "https://openapi.baidu.com/oauth/2.0/authorize"
 AUTH_SERV        = 'https://bypy-tianze.rhcloud.com/auth'
 SESSION_FILE     = File.expand_path('~/.baiduyun')
 SESSION_LOG      = File.expand_path("~/.baiduyun.log")
-PCS_BASE_URI     = 'https://pcs.baidu.com/rest/2.0/pcs/'
+PCS_BASE_URI     = 'https://c.pcs.baidu.com/rest/2.0/pcs/'
 BAIDU_USER_AGENT = 'netdisk;4.6.4.1;PC;PC-Windows;6.3.9600;WindowsBaiduYunGuanJia'
 PCS_PREFIX       = '/rest/2.0/pcs/'
 PCS_METHODS      = {
@@ -316,8 +316,8 @@ class BaiduYun
     api_run(:file_locateupload)
   end
 
-  def server
-    @api.server
+  def server(uri = nil)
+    @api.server(uri)
   end
 
   def ls(path = nil)
@@ -423,9 +423,11 @@ class BaiduYun
   end
 
   def da(url)
-    api_run("services/cloud_dl|add_task",
-            source_url: url,
-            save_path: @pwd )
+    api_run("services/cloud_dl|add_task", source_url: url, save_path: @pwd )
+  end
+
+  def dq(*ids)
+    api_run("services/cloud_dl|query_task", task_ids: ids.map(&:to_s).join(","))
   end
 
   private
@@ -492,6 +494,7 @@ class BaiduYunCLI < BaiduYun
     debug on      打开debug显示
     da URL        添加离线下载
     dl            查看离线下载列表
+    dq ID         查询下载任务
     find FILE     递归在当前目录查找文件
     get FILE      下载单个文件
     url FILE      打印单个文件的下载链接
@@ -550,8 +553,12 @@ class BaiduYunCLI < BaiduYun
     retry
   rescue Exception => e
     case e
-    when ArgumentError; puts "无效的参数"; retry
-    when RuntimeError;  puts e;            retry
+    when  ArgumentError; puts "无效的参数"; retry
+    when  RuntimeError;  puts e;            retry
+    else
+      puts "#{e.class}: #{e}"
+      puts e.backtrace.join("\n")
+      retry
     end
   end
 
@@ -619,6 +626,11 @@ class BaiduYunCLI < BaiduYun
     end
   end
 
+  def da(url)
+    super
+    on_success { puts "任务已经添加： #{@res[:task_id]}"}
+  end
+
   def get(path)
     success, reason = super
     # on_success could not be used here because there is no return code
@@ -640,10 +652,6 @@ class BaiduYunCLI < BaiduYun
 
   def history
     puts Readline::HISTORY.to_a.last(10).join("\n")
-  end
-
-  def server
-    puts super
   end
 
   def servers

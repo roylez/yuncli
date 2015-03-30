@@ -13,6 +13,7 @@
     debug on      打开debug显示
     da URL        添加离线下载
     dl            查看离线下载列表
+    dq ID         查询单个下载任务
     find FILE     递归在当前目录查找文件
     get FILE      下载单个文件
     url FILE      打印单个文件的下载链接
