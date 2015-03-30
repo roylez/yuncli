@@ -61,9 +61,10 @@ module TyphoeusConnection
   end
 
   def download(full_path, filename)
-    range = "bytes=#{File.size(filename) + 1}-"   rescue  nil
-    run(:file_download, path: full_path) do |request|
-      f = File.open(filename, 'wb')
+    range = "bytes=#{File.size(filename)}-"   rescue  nil
+    header = range ? {'Range' => range} : {}
+    run(:file_download, {path: full_path}, {}, header) do |request|
+      f = open(filename, range ? 'a+b' : 'wb')
       request.on_headers  {|resp| handle_download_errors(resp.code) }
       request.on_body     {|chunk| f.write(chunk) }
       request.on_complete {|resp| f.close}
@@ -118,9 +119,13 @@ module NetHTTPConnection
   end
 
   def download(full_path, filename)
-    run(:file_download, path: full_path) do |resp|
+    range = "bytes=#{File.size(filename)}-"   rescue  nil
+    header = range ? {'Range' => range} : {}
+    run(:file_download, {path: full_path}, {}, header) do |resp|
       handle_download_errors(resp.code)
-      open(filename, 'wb') { |f| resp.read_body {|segment| f << segment; sleep 0.005 } }
+      open(filename, range ? 'a+b' : 'wb') do |f|
+        resp.read_body {|segment| f << segment; sleep 0.005 }
+      end
     end
     [ true, :ok ]
   end
@@ -268,7 +273,8 @@ class BaiduYunConn
 
     log.info(method) { uri }
     log.info(method) { "PARAMS: #{params}" }
-    log.info(method) { "BODY: #{body.inspect}" }  unless body.empty? or body.key? :file
+    log.info(method) { "BODY: #{body.inspect}" }        unless body.empty? or body.key? :file
+    log.info(method) { "HEADERS: #{header.inspect}" }   unless header.reject{|k,_| k == 'User-Agent'}.empty?
 
     [uri, {method: method, params: params, body: body, headers: header}]
   end
