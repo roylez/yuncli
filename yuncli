@@ -285,13 +285,13 @@ class BaiduYun
   end
 
   def cd(path = nil)
-    path = absolute_path(path || APP_ROOT_DIR, @pwd)
+    path = remote_file(path || APP_ROOT_DIR)
     # going above root dir is not allowed
     @pwd = path >= APP_ROOT_DIR ? path : APP_ROOT_DIR
   end
 
   def cp(from, to)
-    api_run(:file_copy, :from => absolute_path(from), :to => absolute_path(to))
+    api_run(:file_copy, :from => remote_file(from), :to => remote_file(to))
   end
 
   def lcd(path)
@@ -335,28 +335,26 @@ class BaiduYun
   def rm(*path)
     api_run(:file_delete,
             { },
-            { :param => {:list => path.map{|f| {:path => absolute_path(f) }}}.to_json }  )
+            { :param => {:list => path.map{|f| {:path => remote_file(f) }}}.to_json }  )
   end
 
   def put(file)
     fn = File.basename(file)
-    local_file = absolute_path(file, @lpwd)
-    remote_file = absolute_path(fn)
+    lf = local_file(file)
+    rf = remote_file(fn)
     file_size = File.size(local_file)
     if file_size > 262144     # > 256K try rapidupload first
       api_run(:file_rapidupload,
-              :path             => remote_file,
+              :path             => rf,
               :"content-length" => file_size,
-              :"content-md5"    => `md5sum -b #{local_file}`.split(" ").first,
-              :"content-crc32"  => `crc32 #{local_file}`.chomp,
-              :"slice-md5"      => Digest::MD5.hexdigest( IO.read(local_file, 262144) )
+              :"content-md5"    => `md5sum -b #{lf}`.split(" ").first,
+              :"content-crc32"  => `crc32 #{lf}`.chomp,
+              :"slice-md5"      => Digest::MD5.hexdigest( IO.read(lf, 262144) )
              )
       return if success?
     end
     # Carveat, in body params, pass read() to a file handler could cause problem
-    api_run(:file_upload,
-            { path: remote_file, ondup: 'overwrite' },
-            { file: open(local_file) })
+    api_run(:file_upload, { path: rf, ondup: 'overwrite' }, { file: open(lf) })
   end
 
   def find(wd, path = '.')
@@ -366,19 +364,19 @@ class BaiduYun
   def get(path)
     fn = File.basename(path)
     #http://stackoverflow.com/questions/2263540/how-do-i-download-a-binary-file-over-http
-    @api.download(absolute_path(path), File.join(@lpwd, fn))
+    @api.download(remote_file(path), local_file(fn))
   rescue => e
     [false, e.to_s ]
   end
 
   # get download url for a file
   def url(path)
-    uri, details = @api.cmd_to_url(:file_download, path: absolute_path(path))
+    uri, details = @api.cmd_to_url(:file_download, path: remote_file(path))
     @api.full_uri(uri, details[:params])
   end
 
   def meta(path)
-    api_run(:file_meta, path: absolute_path(path))
+    api_run(:file_meta, path: remote_file(path))
   end
 
   def mget(pattern)
@@ -389,7 +387,7 @@ class BaiduYun
   end
 
   def mput(pattern)
-    matches = Dir[absolute_path(pattern, @lpwd)].select{|f| File.file? f }
+    matches = Dir[local_file(pattern)].select{|f| File.file? f }
     matches.each {|f| put f }
   end
 
@@ -400,11 +398,11 @@ class BaiduYun
   end
 
   def mkdir(path)
-    api_run(:file_mkdir, path: absolute_path(path))
+    api_run(:file_mkdir, path: remote_file(path))
   end
 
   def mv(src, des)
-    api_run(:file_move, from: absolute_path(src), to: absolute_path(des))
+    api_run(:file_move, from: remote_file(src), to: remote_file(des))
   end
 
   def debug(status = nil)
@@ -428,11 +426,11 @@ class BaiduYun
   # for joining files, might be useful SOMEDAY
   def join(path, *src_files)
     block_list = src_files.map{|f|
-      res = api_run(:file_meta, path: absolute_path(f))
+      res = api_run(:file_meta, path: remote_file(f))
       JSON.parse res[:list].first[:block_list]
     }.flatten
     api_run :file_createsuperfile,
-            { path: absolute_path(path) },
+            { path: remote_file(path) },
             { param: { block_list: block_list }.to_json }
   end
 
@@ -457,6 +455,14 @@ class BaiduYun
   def absolute_path(path, reference = @pwd)
     path = File.expand_path(File.join(reference, path))  unless path.start_with? '/'
     path
+  end
+
+  def remote_file(path)
+    absolute_path(path, @pwd)
+  end
+
+  def local_file(path)
+    absolute_path(path, @lpwd)
   end
 
   def on_success
