@@ -1,5 +1,5 @@
 
-## yuncli
+## :cloud: yuncli
 
 `yuncli`是一个模仿[lftp][1]的百度云命令行客户端。用ruby编写，没有任何强制性的gem
 依赖。
@@ -39,6 +39,7 @@
 
 * 模仿lftp操作
 * 采用readline库，支持历史命令记录，命令和目录补全
+* 支持断点续传
 * 可以使用ruby自带`Net::HTTP`发送http请求，也可以使用[typhoeus][3]
 * `class BaiduYun`可以单独使用，包含有大部分交互环境下支持的命令
 * 暂时没有多线程支持

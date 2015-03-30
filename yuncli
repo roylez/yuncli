@@ -515,8 +515,6 @@ class BaiduYunCLI < BaiduYun
   def initialize
     super
     @stty_save = `stty -g`.chomp
-    #trap("INT") {system('stty', @stty_save); exit}   # trap ^C and gracefully exit
-    trap("INT", 'SIG_IGN')    # trap ^C and return back to loop
 
     @comp = proc {|s|
       # complete command if there is no command entered
@@ -540,16 +538,20 @@ class BaiduYunCLI < BaiduYun
   def main_loop
     load_history
     Readline.completion_proc = @comp
-    while @line = Readline.readline(prompt, true)
-      dispatch_command(@line)
+    while line = Readline.readline(prompt, true)
+      dispatch_command(line)
       # remove empty or dupicated commands
       save_history
     end
-  rescue => e
+  rescue Interrupt
+    buffer = Readline.line_buffer
+    puts
+    puts "操作取消" unless buffer.strip.empty?
+    retry
+  rescue Exception => e
     case e
-    when Interrupt;     puts "Interrupted... quitting"; quit
-    when ArgumentError; puts "无效的参数";              retry
-    when RuntimeError;  puts e;                         retry
+    when ArgumentError; puts "无效的参数"; retry
+    when RuntimeError;  puts e;            retry
     end
   end
 
