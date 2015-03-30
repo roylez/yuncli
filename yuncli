@@ -184,12 +184,10 @@ class BaiduYunConn
   end
 
   def logout
-    unless @token
-      return nil
-    end
+    return nil unless @token
     clean_session
     @token = nil
-    return true
+    true
   end
 
   def run(cmd, params = {}, body = {}, header = {}, &block)
