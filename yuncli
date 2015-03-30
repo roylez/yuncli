@@ -637,6 +637,11 @@ class BaiduYunCLI < BaiduYun
     puts( success ?  "下载完成: #{path}" : "下载失败: #{reason}" )
   end
 
+  def server(url = nil)
+    res = super
+    puts res  unless url
+  end
+
   def url(path)
     puts super
   end
