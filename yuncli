@@ -61,6 +61,7 @@ module TyphoeusConnection
   end
 
   def download(full_path, filename)
+    range = "bytes=#{File.size(filename) + 1}-"   rescue  nil
     run(:file_download, path: full_path) do |request|
       f = File.open(filename, 'wb')
       request.on_headers  {|resp| handle_download_errors(resp.code) }
@@ -178,22 +179,22 @@ class BaiduYunConn
     @token = res[:access_token]
   end
 
-  def run(cmd, params = {}, body = {}, &block)
-    uri, detail = cmd_to_url(cmd, params, body)
+  def run(cmd, params = {}, body = {}, header = {}, &block)
+    uri, detail = cmd_to_url(cmd, params, body, header)
 
     block_given? ?  request(uri, detail, &block) : request_json(uri, detail)
   end
 
-  def cmd_to_url(cmd, params = {}, body = {})
+  def cmd_to_url(cmd, params = {}, body = {}, header = {})
     authenticate_first      # without this, there is no @token
     params[:access_token] = @token
     service, method = split_command(cmd.to_s)
 
     [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
 
-    args = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
+    params = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
 
-    request_info(PCS_PREFIX + service, args, body)
+    request_info(PCS_PREFIX + service, params, body, header)
   end
 
   def authenticate_first
@@ -260,10 +261,10 @@ class BaiduYunConn
     body
   end
 
-  def request_info(uri, params = {}, body = {})
+  def request_info(uri, params = {}, body = {}, header = {})
     method = params.delete(:request) || :get
     uri    = URI.join(server, uri).to_s unless uri.start_with? 'http'
-    header = request_to_baidu? ? {'User-Agent' => BAIDU_USER_AGENT } : { }
+    header = request_to_baidu? ? header.merge('User-Agent' => BAIDU_USER_AGENT ) : header
 
     log.info(method) { uri }
     log.info(method) { "PARAMS: #{params}" }
