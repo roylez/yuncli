@@ -365,7 +365,7 @@ class BaiduYun
     fn = File.basename(file)
     lf = local_file(file)
     rf = remote_file(fn)
-    file_size = File.size(local_file)
+    file_size = File.size(lf)
     if file_size > 262144     # > 256K try rapidupload first
       api_run(:file_rapidupload,
               :path             => rf,
@@ -579,7 +579,6 @@ class BaiduYunCLI < BaiduYun
     retry
   rescue Exception => e
     case e
-    when  ArgumentError; puts "无效的参数"; retry
     when  RuntimeError;  puts e;            retry
     else
       puts "#{e.class}: #{e}"
