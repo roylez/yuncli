@@ -274,7 +274,7 @@ class BaiduYunConn
     logger.info(:RESPONSE) { res.inspect }
     res
   rescue JSON::ParserError
-    body
+    response.code == 302 ? {error_code: 302, error_msg: '文件已被墙' } : body
   end
 
   def request_info(uri, params = {}, body = {}, header = {})
