@@ -371,7 +371,7 @@ class BaiduYun
               :path             => rf,
               :"content-length" => file_size,
               :"content-md5"    => `md5sum -b #{lf}`.split(" ").first,
-              :"content-crc32"  => `crc32 #{lf}`.chomp,
+              :"content-crc32"  => `crc32 #{lf}`.chomp,       # not necessary
               :"slice-md5"      => Digest::MD5.hexdigest( IO.read(lf, 262144) )
              )
       return if success?
@@ -536,7 +536,7 @@ class BaiduYunCLI < BaiduYun
     server        显示当前使用的服务器
     servers       显示可以使用的服务器列表
     logout        登出账号
-    quit          退出
+    quit/bye      退出
   HELPDOC
 
   def initialize
@@ -588,8 +588,10 @@ class BaiduYunCLI < BaiduYun
   end
 
   def quit
-    system('stty', @stty_save); exit
+    system("stty #{@stty_save} &>/dev/null"); exit!
   end
+
+  alias :bye   :quit
 
   def logout
     if super
