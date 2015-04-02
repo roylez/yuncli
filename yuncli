@@ -567,10 +567,10 @@ class BaiduYunCLI < BaiduYun
   def main_loop
     load_history
     Readline.completion_proc = @comp
-    while line = Readline.readline(prompt, true)
-      dispatch_command(line)
+    while @line = Readline.readline(prompt, true)
       # remove empty or dupicated commands
       save_history
+      dispatch_command
     end
   rescue Interrupt
     buffer = Readline.line_buffer
@@ -746,8 +746,8 @@ class BaiduYunCLI < BaiduYun
     Readline::HISTORY.push(* open(SESSION_LOG).readlines.map(&:chomp).uniq )   if File.file? SESSION_LOG
   end
 
-  def dispatch_command(string)
-    case string.strip
+  def dispatch_command
+    case @line.strip
     when /^([^ ]+)(?:\s+([^ ].*))?$/i;
       if methods.include? $1.to_sym
         $2 ? send($1, *(Shellwords.split($2))) : send($1)
