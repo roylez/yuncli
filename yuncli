@@ -441,6 +441,7 @@ class BaiduYun
 
   def da(url)
     api_run("services/cloud_dl|add_task", source_url: url, save_path: @pwd )
+    @tasks << @res[:task_id].to_s  if success?
   end
 
   def dq(*ids)
@@ -662,7 +663,11 @@ class BaiduYunCLI < BaiduYun
   end
 
   def da(url)
-    super; on_success { puts "任务已经添加： #{@res[:task_id]}"}
+    super
+    on_success do
+      status = @res[:rapid_download] == 1 ? '完成'.color(32) : '添加'.color(33)
+      puts "任务已经#{status}： #{@res[:task_id]}"
+    end
   end
 
   def dl
