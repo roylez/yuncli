@@ -580,7 +580,7 @@ class BaiduYunCLI < BaiduYun
     retry
   rescue Exception => e
     case e
-    when  RuntimeError;  puts e;            retry
+    when  RuntimeError;  puts "错误: #{e}"; retry
     else
       puts "#{e.class}: #{e}"
       puts e.backtrace.join("\n")
@@ -595,11 +595,8 @@ class BaiduYunCLI < BaiduYun
   alias :bye   :quit
 
   def logout
-    if super
-      puts "已登出, 继续操作需重新登录."
-    else
-      puts "未登录, 咋登出?"
-    end
+    raise "未登录, 咋登出?" unless super
+    puts "已登出, 继续操作需重新登录."
   end
 
   def help
@@ -675,6 +672,7 @@ class BaiduYunCLI < BaiduYun
   end
 
   def dq(*ids)
+    raise "请输入有效的下载任务编号"  if ids.empty?
     super
     on_success do
       @res[:task_info].each do |id, info|
