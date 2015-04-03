@@ -679,7 +679,7 @@ class BaiduYunCLI < BaiduYun
     on_success do
       @res[:task_info].each do |id, info|
         percent = info[:finished_size].to_f / info[:file_size].to_i * 100
-        info.merge(:task_id => id, :completed => "%d %" % percent).
+        info.merge(:task_id => id, :completed => "%d %" % (percent.nan? ? 0 : percent )).
           each {|k,v| puts "#{"%16s" % k} : #{v}"}
       end
     end
