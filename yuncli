@@ -2,14 +2,8 @@
 # encoding: utf-8
 #Description: 模仿lftp的百度云命令行交互接口
 
-require 'net/http'
-require 'uri'
-require 'json'
-require 'readline'
-require 'logger'
-require 'shellwords'
-require 'digest'
-require 'pathname'
+# built in libraries...
+%w{net/http uri json readline logger shellwords digest pathname}.each{|m| require m }
 require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
 
 module TyphoeusConnection
