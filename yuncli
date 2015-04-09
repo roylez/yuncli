@@ -6,6 +6,7 @@
 %w{net/http uri json readline logger shellwords digest pathname}.each{|m| require m }
 if Gem::Specification.all_names.any?{|n| n =~ /^typhoeus-/ } and not ENV['NO_TYPHOEUS']
   require 'typhoeus'
+  USE_TYPHOEUS = 1
 else
   puts "Typhoeus not found, fallback to Net::HTTP methods."
 end
@@ -15,7 +16,6 @@ module TyphoeusConnection
     return @server unless uri
     @server = uri.start_with?('http') ? uri : ("https://" + uri)
     @server = @server[%r{https://[^/]+}]
-    puts "当前服务器: #{@server}"
     @server
   end
 
@@ -47,7 +47,6 @@ module NetHTTPConnection
     u       = URI(@server)
     @http   = Net::HTTP.new(u.host, u.port)
     @http.use_ssl = true
-    puts "当前服务器: #{@server}"
     @server
   end
 
@@ -62,28 +61,28 @@ module NetHTTPConnection
   #   :body       request data to be embeded in request body, ie. post form
   #   :headers    request header string
   def request(uri, detail = {}, &block)
-    unless request_to_baidu?
-      uri = server(uri).request_uri   # create @http to match uri
-    else
-      uri = URI(uri).request_uri
+    method_handlers = { get: Net::HTTP::Get, post: Net::HTTP::Post }.freeze
+
+    if uri.start_with? 'http'
+      u     = URI(uri)
+      uri   = u.request_uri
+      @http = Net::HTTP.new(u.host, u.port)
+      @http.use_ssl = u.scheme == 'https'
     end
     header = detail.fetch(:headers, {})
-    body   = detail.fetch(:body, {})
-    params = detail.fetch(:params, {})
-    method = detail.fetch(:method, :get)
-    request = {
-      :get  => Net::HTTP::Get,
-      :post => Net::HTTP::Post,
-    }[method].new( full_uri(uri, params ) )
+    body   = detail.fetch(:body,    {})
+    params = detail.fetch(:params,  {})
+    method = detail.fetch(:method,  :get)
+    req    = method_handlers[method].new( full_uri(uri, params ) )
+
     if body[:file]
-      request.body, content_type = encode_body(body, params)
+      req.body, content_type = encode_body(body, params)
       header['Content-Type'] = content_type
     else
-      request.form_data = body
+      req.form_data = body
     end
-    request.initialize_http_header(header)
-    p @http
-    block_given? ? @http.request(request, &block) : @http.request(request)
+    req.initialize_http_header(header)
+    block_given? ? @http.request(req, &block) : @http.request(req)
   end
 
   def download(full_path, filename)
@@ -129,7 +128,8 @@ class BaiduYunConn
   APP_ROOT_DIR = File.join("/apps/", APP_NAME)
   API_KEY      = 'q8WE4EpCsau1oS0MplgMKNBn'
   AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
-  AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
+  # AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
+  AUTH_SERV    = 'http://bypyoauth.jd-app.com/auth'
   PCS_BASE_URI = 'https://c.pcs.baidu.com/rest/2.0/pcs/'
   USER_AGENT   = 'netdisk;4.6.4.1;PC;PC-Windows;6.3.9600;WindowsBaiduYunGuanJia'
   PCS_PREFIX   = '/rest/2.0/pcs/'
@@ -157,7 +157,7 @@ class BaiduYunConn
   }
 
   attr_accessor :logger
-  include defined?(Typhoeus) ? TyphoeusConnection : NetHTTPConnection
+  include defined?(USE_TYPHOEUS) ? TyphoeusConnection : NetHTTPConnection
 
   def initialize
     server PCS_BASE_URI
@@ -175,7 +175,10 @@ class BaiduYunConn
     puts; puts auth_url; puts
     print "请输入验证token并按 ENTER 继续: "
 
-    res = request_json(AUTH_SERV, params: {code: STDIN.gets.chomp,  redirect_uri: 'oob'})
+    new_params = {code: STDIN.gets.chomp,  redirect_uri: 'oob'}
+    log.info "REQUEST: " + AUTH_SERV + '?' + URI.encode_www_form(new_params)
+
+    res = request_json(AUTH_SERV, params: new_params)
 
     save_session(res)
 
@@ -244,7 +247,8 @@ class BaiduYunConn
     @token
   rescue
     log.fatal "Error loading token from #{SESSION_FILE}"
-    exit 1
+    puts "无法读取登录记录文件 #{SESSION_FILE}"
+    exit! 1
   end
 
   def save_session(session_detail)

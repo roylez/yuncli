@@ -1,0 +1,4 @@
+--color
+--format Fuubar
+--fail-fast
+--require spec_helper.rb

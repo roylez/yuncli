@@ -1,0 +1,62 @@
+GEM
+  remote: http://ruby.taobao.org/
+  specs:
+    addressable (2.3.8)
+    byebug (4.0.5)
+      columnize (= 0.9.0)
+    coderay (1.1.0)
+    columnize (0.9.0)
+    crack (0.4.2)
+      safe_yaml (~> 1.0.0)
+    diff-lcs (1.2.5)
+    dotenv (2.0.1)
+    ethon (0.7.3)
+      ffi (>= 1.3.0)
+    ffi (1.9.8)
+    fuubar (2.0.0)
+      rspec (~> 3.0)
+      ruby-progressbar (~> 1.4)
+    method_source (0.8.2)
+    pry (0.10.1)
+      coderay (~> 1.1.0)
+      method_source (~> 0.8.1)
+      slop (~> 3.4)
+    pry-byebug (3.1.0)
+      byebug (~> 4.0)
+      pry (~> 0.10)
+    rspec (3.2.0)
+      rspec-core (~> 3.2.0)
+      rspec-expectations (~> 3.2.0)
+      rspec-mocks (~> 3.2.0)
+    rspec-core (3.2.3)
+      rspec-support (~> 3.2.0)
+    rspec-expectations (3.2.1)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.2.0)
+    rspec-mocks (3.2.1)
+      diff-lcs (>= 1.2.0, < 2.0)
+      rspec-support (~> 3.2.0)
+    rspec-support (3.2.2)
+    ruby-progressbar (1.7.5)
+    safe_yaml (1.0.4)
+    slop (3.6.0)
+    typhoeus (0.7.1)
+      ethon (>= 0.7.1)
+    vcr (2.9.3)
+    webmock (1.21.0)
+      addressable (>= 2.3.6)
+      crack (>= 0.3.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  byebug
+  dotenv
+  fuubar
+  pry
+  pry-byebug
+  rspec
+  typhoeus
+  vcr
+  webmock
