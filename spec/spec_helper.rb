@@ -18,4 +18,7 @@ VCR.configure do |config|
 end
 
 RSpec.configure do |conf|
+  def fixture(fn)
+    "spec/fixtures/#{fn}"
+  end
 end

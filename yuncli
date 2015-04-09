@@ -262,7 +262,7 @@ class BaiduYunConn
   end
 
   def log
-    @logger ||= Logger.new(STDOUT)
+    @logger ||= Logger.new( ENV['YUNCLI_LOG'] ? STDOUT : '/dev/null' )
   end
 
   def full_path(path)
@@ -380,6 +380,7 @@ class BaiduYun
       full_path = absolute_path(path, @root)
       @files[full_path] = @res[:list].map{|i| [ File.basename(i[:path]), i[:isdir] == 1 ] }
     end
+    @res
   end
 
   alias :_ls :ls
@@ -435,8 +436,8 @@ class BaiduYun
     @api.full_uri(uri, details[:params])
   end
 
-  def meta(path)
-    api_run(:file_meta, path: remote_file(path))
+  def meta(path = nil)
+    api_run(:file_meta, path: remote_file(path || @pwd))
   end
 
   def mget(pattern)
@@ -652,7 +653,7 @@ class BaiduYunCLI < BaiduYun
     end
   end
 
-  def meta(path)
+  def meta(path = nil)
     super
     on_success do
       basics = @res.delete(:list).first
