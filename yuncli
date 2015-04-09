@@ -4,7 +4,11 @@
 
 # built in libraries...
 %w{net/http uri json readline logger shellwords digest pathname}.each{|m| require m }
-require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
+if Gem::Specification.all_names.any?{|n| n =~ /^typhoeus-/ } and not ENV['NO_TYPHOEUS']
+  require 'typhoeus'
+else
+  puts "Typhoeus not found, fallback to Net::HTTP methods."
+end
 
 module TyphoeusConnection
   def server(uri = nil)
@@ -66,10 +70,11 @@ module NetHTTPConnection
     header = detail.fetch(:headers, {})
     body   = detail.fetch(:body, {})
     params = detail.fetch(:params, {})
+    method = detail.fetch(:method, :get)
     request = {
       :get  => Net::HTTP::Get,
       :post => Net::HTTP::Post,
-    }[detail[:method]].new( full_uri(uri, params ) )
+    }[method].new( full_uri(uri, params ) )
     if body[:file]
       request.body, content_type = encode_body(body, params)
       header['Content-Type'] = content_type
@@ -77,6 +82,7 @@ module NetHTTPConnection
       request.form_data = body
     end
     request.initialize_http_header(header)
+    p @http
     block_given? ? @http.request(request, &block) : @http.request(request)
   end
 
@@ -169,7 +175,7 @@ class BaiduYunConn
     puts; puts auth_url; puts
     print "请输入验证token并按 ENTER 继续: "
 
-    res = request_json(AUTH_SERV, params: {code: STDIN.gets.chomp, redirect_uri: 'oob'})
+    res = request_json(AUTH_SERV, params: {code: STDIN.gets.chomp,  redirect_uri: 'oob'})
 
     save_session(res)
 
@@ -192,11 +198,11 @@ class BaiduYunConn
   def cmd_to_url(cmd, params = {}, body = {}, header = {})
     authenticate_first      # without this, there is no @token
     params[:access_token] = @token
-    service, method = split_command(cmd.to_s)
+    service, yun_method = split_command(cmd.to_s)
 
     [:path, :from, :to].each {|k| params[k] = full_path(params[k])   if params.key? k }
 
-    params = params.merge(:method => method, :request => PCS_METHODS[cmd.to_sym] || :get )
+    params = params.merge(:method => yun_method, :request => PCS_METHODS[cmd.to_sym] || :get )
 
     request_info(PCS_PREFIX + service, params, body, header)
   end
@@ -264,7 +270,7 @@ class BaiduYunConn
     response = request(uri, details)
     body = response.body
     res = JSON.parse(body, :symbolize_names => true)
-    logger.info(:RESPONSE) { res.inspect }
+    log.info(:RESPONSE) { res.inspect }
     res
   rescue JSON::ParserError
     response.code == 302 ? {error_code: 302, error_msg: '文件已被墙' } : body
