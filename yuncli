@@ -648,8 +648,8 @@ class BaiduYunCLI < BaiduYun
   def quota
     super
     on_success do
-      puts "QUOTA:  #{format_size @res[:quota] }"
-      puts "USED:   #{format_size @res[:used] }"
+      puts "QUOTA:  #{format_size @res,:quota }"
+      puts "USED:   #{format_size @res,:used }"
     end
   end
 
@@ -817,8 +817,8 @@ class BaiduYunCLI < BaiduYun
       t.strftime("%H:%M:%S").color('35') + "]".color('33')
   end
 
-  def format_size(record)
-    size = record[:size]
+  def format_size(record, field = :size)
+    size = record[field]
     s = case size
         when  0..1024;               size.to_s
         when  1024..1024000;         "%.2f" % (size/1E3) + 'K'
