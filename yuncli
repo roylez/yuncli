@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # encoding: utf-8
-#Description:
+#Description: 模仿lftp的百度云命令行交互接口
 
 require 'net/http'
 require 'uri'
@@ -11,38 +11,6 @@ require 'shellwords'
 require 'digest'
 require 'pathname'
 require 'typhoeus' rescue puts "Typhoeus not found, fallback to Net::HTTP methods."
-
-APP_NAME         = 'bypy'
-APP_ROOT_DIR     = File.join("/apps/", APP_NAME)
-API_KEY          = 'q8WE4EpCsau1oS0MplgMKNBn'
-AUTH_API_URL     = "https://openapi.baidu.com/oauth/2.0/authorize"
-AUTH_SERV        = 'https://bypy-tianze.rhcloud.com/auth'
-SESSION_FILE     = File.expand_path('~/.baiduyun')
-SESSION_LOG      = File.expand_path("~/.baiduyun.log")
-PCS_BASE_URI     = 'https://c.pcs.baidu.com/rest/2.0/pcs/'
-BAIDU_USER_AGENT = 'netdisk;4.6.4.1;PC;PC-Windows;6.3.9600;WindowsBaiduYunGuanJia'
-PCS_PREFIX       = '/rest/2.0/pcs/'
-PCS_METHODS      = {
-  :quota_info                      => :get,
-  :file_upload                     => :post,
-  :file_download                   => :get,
-  :file_createsuperfile            => :post,
-  :file_mkdir                      => :post,
-  :file_meta                       => :get,
-  :file_list                       => :get,
-  :file_move                       => :post,
-  :file_copy                       => :post,
-  :file_delete                     => :post,
-  :file_search                     => :get,
-  :file_diff                       => :get,
-  :file_streaming                  => :get,
-  :file_rapidupload                => :post,
-  :thunmbnail_generate             => :get,
-  :"services/cloud_dl|list_task"   => :post,
-  :"services/cloud_dl|query_task"  => :post,
-  :"services/cloud_dl|add_task"    => :post,
-  :"services/cloud_dl|cancel_task" => :post,
-}
 
 module TyphoeusConnection
   def server(uri = nil)
@@ -157,6 +125,37 @@ end
 
 # This class defines connectivity level stuff
 class BaiduYunConn
+  APP_NAME     = 'bypy'
+  APP_ROOT_DIR = File.join("/apps/", APP_NAME)
+  API_KEY      = 'q8WE4EpCsau1oS0MplgMKNBn'
+  AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
+  AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
+  PCS_BASE_URI = 'https://c.pcs.baidu.com/rest/2.0/pcs/'
+  USER_AGENT   = 'netdisk;4.6.4.1;PC;PC-Windows;6.3.9600;WindowsBaiduYunGuanJia'
+  PCS_PREFIX   = '/rest/2.0/pcs/'
+  SESSION_FILE = File.expand_path('~/.baiduyun')
+  PCS_METHODS  = {
+    :quota_info                      => :get,
+    :file_upload                     => :post,
+    :file_download                   => :get,
+    :file_createsuperfile            => :post,
+    :file_mkdir                      => :post,
+    :file_meta                       => :get,
+    :file_list                       => :get,
+    :file_move                       => :post,
+    :file_copy                       => :post,
+    :file_delete                     => :post,
+    :file_search                     => :get,
+    :file_diff                       => :get,
+    :file_streaming                  => :get,
+    :file_rapidupload                => :post,
+    :thunmbnail_generate             => :get,
+    :"services/cloud_dl|list_task"   => :post,
+    :"services/cloud_dl|query_task"  => :post,
+    :"services/cloud_dl|add_task"    => :post,
+    :"services/cloud_dl|cancel_task" => :post,
+  }
+
   attr_accessor :logger
   include defined?(Typhoeus) ? TyphoeusConnection : NetHTTPConnection
 
@@ -280,7 +279,7 @@ class BaiduYunConn
   def request_info(uri, params = {}, body = {}, header = {})
     method = params.delete(:request) || :get
     uri    = URI.join(server, uri).to_s unless uri.start_with? 'http'
-    header = request_to_baidu? ? header.merge('User-Agent' => BAIDU_USER_AGENT ) : header
+    header = request_to_baidu? ? header.merge('User-Agent' => USER_AGENT ) : header
 
     log.info(method) { uri }
     log.info(method) { "PARAMS: #{params}" }
@@ -294,19 +293,23 @@ end
 
 # API level stuff defined here
 class BaiduYun
+  SESSION_LOG  = File.expand_path("~/.baiduyun.log")
+
   def initialize
     @api   = BaiduYunConn.new
-    @pwd   = APP_ROOT_DIR
+    @pwd   = BaiduYunConn::APP_ROOT_DIR
+    @root  = BaiduYunConn::APP_ROOT_DIR
     @lpwd  = ENV['PWD']
     @files = {}           # file listing cache for completion and etc
     @tasks = []           # task listing cache for completion
+    @root.freeze
     debug( ENV['DEBUG'] ? 'on' : 'off' )
   end
 
   def cd(path = nil)
-    path = remote_file(path || APP_ROOT_DIR)
+    path = remote_file(path || @root)
     # going above root dir is not allowed
-    @pwd = path >= APP_ROOT_DIR ? path : APP_ROOT_DIR
+    @pwd = path >= @root ? path : @root
   end
 
   def cp(from, to)
@@ -340,7 +343,7 @@ class BaiduYun
     path = path || relative_path
     api_run(:file_list, :path => path)
     if success?
-      full_path = absolute_path(path, APP_ROOT_DIR)
+      full_path = absolute_path(path, @root)
       @files[full_path] = @res[:list].map{|i| [ File.basename(i[:path]), i[:isdir] == 1 ] }
     end
   end
@@ -370,8 +373,8 @@ class BaiduYun
       api_run(:file_rapidupload,
               :path             => rf,
               :"content-length" => file_size,
-              :"content-md5"    => `md5sum -b #{lf}`.split(" ").first,
-              :"content-crc32"  => `crc32 #{lf}`.chomp,       # not necessary
+              :"content-md5"    => file_md5(lf),
+              # :"content-crc32"  => `crc32 #{lf}`.chomp,       # not necessary
               :"slice-md5"      => Digest::MD5.hexdigest( IO.read(lf, 262144) )
              )
       return if success?
@@ -477,7 +480,7 @@ class BaiduYun
   end
 
   # find path relative to "to" address
-  def relative_path(path = @pwd, to = APP_ROOT_DIR)
+  def relative_path(path = @pwd, to = @root)
     Pathname.new(path).relative_path_from(Pathname.new(to)).to_s
   end
 
@@ -503,6 +506,15 @@ class BaiduYun
 
   def success?
     not @res.key?(:error_code)
+  end
+
+  def file_md5(path)
+    if Gem.win_platform?
+      @md5_proc ||= lambda {|f| Digest::MD5.file(f).hexdigest }
+    else
+      @md5_proc ||= lambda {|f| `md5sum -b #{f}`.split(" ").first }
+    end
+    @md5_proc.call(path)
   end
 
 end
