@@ -834,7 +834,7 @@ class String
   end
 
   def width
-    gsub(/(\e|\033|\33)\[[;0-9]*\D/,'').split(//).inject( 0 ) do |s, i|
+    gsub(/(\e|\033|\33)\[[;0-9]*\D/,'').chars.inject( 0 ) do |s, i|
       s += i.contains_cjk? ? 2 : 1
     end
   end
