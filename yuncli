@@ -129,7 +129,7 @@ class BaiduYunConn
   API_KEY      = 'q8WE4EpCsau1oS0MplgMKNBn'
   AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
   # AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
-  AUTH_SERV    = 'http://bypyoauth.jd-app.com/auth'
+  AUTH_SERV    = 'https://bypyoauth.herokuapp.com/auth'
   PCS_BASE_URI = 'https://c.pcs.baidu.com/rest/2.0/pcs/'
   # USER_AGENT   = 'netdisk;4.6.4.1;PC;PC-Windows;6.3.9600;WindowsBaiduYunGuanJia'
   USER_AGENT   = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10; rv:36.0) Gecko/20100101 Firefox/36.0'
@@ -180,6 +180,12 @@ class BaiduYunConn
     log.info "REQUEST: " + AUTH_SERV + '?' + URI.encode_www_form(new_params)
 
     res = request_json(AUTH_SERV, params: new_params)
+
+    if not res.is_a?(Hash) or res.key? :error_code
+      log.warn "AUTHENTICATION:"
+      log.warn res.inspect
+      raise "无法正确登录，请尝试运行debug on并手动粘贴登录地址到浏览器"
+    end
 
     save_session(res)
 
