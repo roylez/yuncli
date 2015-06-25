@@ -130,6 +130,7 @@ class BaiduYunConn
   AUTH_API_URL = "https://openapi.baidu.com/oauth/2.0/authorize"
   # AUTH_SERV    = 'https://bypy-tianze.rhcloud.com/auth'
   AUTH_SERV    = 'https://bypyoauth.herokuapp.com/auth'
+  REFRESH_SERV = 'https://bypyoauth.herokuapp.com/refresh'
   PCS_BASE_URI = 'https://c.pcs.baidu.com/rest/2.0/pcs/'
   # USER_AGENT   = 'netdisk;4.6.4.1;PC;PC-Windows;6.3.9600;WindowsBaiduYunGuanJia'
   USER_AGENT   = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10; rv:36.0) Gecko/20100101 Firefox/36.0'
@@ -192,6 +193,21 @@ class BaiduYunConn
     @token = res[:access_token]
   end
 
+  def refresh
+    params = { grant_type: 'refresh_token', refresh_token: @session[:refresh_token] }
+    res = request_json(REFRESH_SERV, params: params)
+
+    if not res.is_a?(Hash) or res.key? :error_code
+      log.warn "REFRESH:"
+      log.warn res.inspect
+      raise "无法正确更新token"
+    end
+
+    save_session(res)
+
+    @token = res[:access_token]
+  end
+
   def logout
     return nil unless @token
     clean_session
@@ -247,8 +263,8 @@ class BaiduYunConn
 
   def load_session
     if File.file? SESSION_FILE
-      session = JSON.parse(open(SESSION_FILE, 'r').read, :symbolize_names => true)
-      @token = session[:access_token]
+      @session = JSON.parse(open(SESSION_FILE, 'r').read, :symbolize_names => true)
+      @token = @session[:access_token]
       log.info "Token loaded: #{@token}"
     end
     @token
@@ -543,7 +559,12 @@ class BaiduYun
   end
 
   def on_success
-    success? ?  yield : puts("Error: [#{@res[:error_code]}] #{@res[:error_msg]}")
+    unless success?
+      puts("Error: [#{@res[:error_code]}] #{@res[:error_msg]}")
+      @api.refresh if @res[:error_code] == 111     # token expired
+    else
+      yield
+    end
   end
 
   def success?
