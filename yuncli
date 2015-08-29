@@ -198,9 +198,10 @@ class BaiduYunConn
     res = request_json(REFRESH_SERV, params: params)
 
     if not res.is_a?(Hash) or res.key? :error_code
-      log.warn "REFRESH:"
-      log.warn res.inspect
+      log.warn "REFRESH: #{res}"
       raise "无法正确更新token"
+    else
+      puts "成功更新ACCESS TOKEN"
     end
 
     save_session(res)
@@ -294,6 +295,9 @@ class BaiduYunConn
   end
 
   def request_json(uri, details = {})
+    log.debug(:URI) { uri }
+    log.debug(:PARAMS) { details }
+
     response = request(uri, details)
     body = response.body
     res = JSON.parse(body, :symbolize_names => true)
