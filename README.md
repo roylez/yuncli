@@ -23,12 +23,12 @@
     mget PATTERN  批量下载(单线程)
     mkdir PATH    建立一个目录
     mput PATTERN  批量上传(单线程)
-    mrm PATTERN   批量删除
+    mrm PATTERNS  同rm
     mv FILE FILE  重命名一个文件或目录
     pwd           当前目录
     put FILE      上传单个文件
     quota         容量使用信息
-    rm FILE...    删除文件
+    rm PATTERNS   删除文件
     server        显示当前使用的服务器
     servers       显示可以使用的服务器列表
     quit          退出

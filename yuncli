@@ -344,12 +344,12 @@ class BaiduYun
     mget PATTERN  批量下载(单线程)
     mkdir PATH    建立一个目录
     mput PATTERN  批量上传(单线程)
-    mrm PATTERN   批量删除
+    mrm PATTERNS  同rm
     mv FILE FILE  重命名一个文件或目录
     pwd           当前目录
     put FILE      上传单个文件
     quota         容量使用信息
-    rm FILE...    删除文件
+    rm PATTERNS   删除文件
     server        显示当前使用的服务器
     servers       显示可以使用的服务器列表
     logout        登出账号
@@ -420,11 +420,15 @@ class BaiduYun
     api_run(:quota_info)
   end
 
-  def rm(*path)
+  def rm(*pattern)
+    _ls unless files
+    path = files.map(&:first).
+      select{|f| pattern.any?{|pt| File.fnmatch(pt, f) }}
     api_run(:file_delete,
             { },
             { :param => {:list => path.map{|f| {:path => remote_file(f) }}}.to_json }  )
   end
+  alias :mrm :rm
 
   def put(file)
     fn = File.basename(file)
@@ -477,12 +481,6 @@ class BaiduYun
   def mput(pattern)
     matches = Dir[local_file(pattern)].select{|f| File.file? f }
     matches.each {|f| put f }
-  end
-
-  def mrm(pattern)
-    _ls unless files
-    matches = files.select{|f,dir| File.fnmatch(pattern, f) }.map(&:first)
-    rm(*matches)  unless matches.empty?
   end
 
   def mkdir(path)
