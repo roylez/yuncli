@@ -196,6 +196,19 @@ class BaiduYunConn
     @token = res[:access_token]
   end
 
+  def request_json(uri, details = {})
+    log.debug(:URI) { uri }
+    log.debug(:PARAMS) { details }
+
+    response = request(uri, details)
+    body = response.body
+    res = JSON.parse(body, :symbolize_names => true)
+    log.info(:RESPONSE) { res.inspect }
+    res
+  rescue JSON::ParserError
+    response.code == 302 ? {error_code: 302, error_msg: '文件已被墙' } : body
+  end
+
   def refresh
     params = { grant_type: 'refresh_token', refresh_token: @session[:refresh_token] }
     res = request_json(REFRESH_SERV, params: params)
@@ -297,19 +310,6 @@ class BaiduYunConn
     path
   end
 
-  def request_json(uri, details = {})
-    log.debug(:URI) { uri }
-    log.debug(:PARAMS) { details }
-
-    response = request(uri, details)
-    body = response.body
-    res = JSON.parse(body, :symbolize_names => true)
-    log.info(:RESPONSE) { res.inspect }
-    res
-  rescue JSON::ParserError
-    response.code == 302 ? {error_code: 302, error_msg: '文件已被墙' } : body
-  end
-
   def request_info(uri, params = {}, body = {}, header = {})
     method = params.delete(:request) || :get
     uri    = URI.join(server, uri).to_s unless uri.start_with? 'http'
@@ -390,9 +390,10 @@ class BaiduYun
   end
 
   #  API found here, no doc anywhere ....
-  #  https://github.com/ly0/baidupcsapi/blob/master/baidupcsapi/api.py
+  #  http://baidupcsapi.readthedocs.io/en/latest/_modules/baidupcsapi/api.html
   def servers
-    api_run(:file_locateupload)
+    endpoint = 'https://pcs.baidu.com/rest/2.0/pcs/manage?method=listhost'
+    @res = @api.request_json( endpoint )
   end
 
   def server(uri = nil)
@@ -528,6 +529,7 @@ class BaiduYun
       JSON.parse res[:list].first[:block_list]
     }.flatten
     api_run :file_createsuperfile,
+
             { path: remote_file(path) },
             { param: { block_list: block_list }.to_json }
   end
@@ -763,16 +765,36 @@ class BaiduYunCLI < BaiduYun
 
   def servers
     super
-    on_success{ @res[:server].each{|s| puts s == @res[:host] ? s + "\t(最快)" : s } }
+    on_success{ @res[:list].each{|s| puts s[:host] } }
   end
 
   def auto_server
     # an ugly way to call a super method that is overridden
     super_method(:servers).call
-    on_success{ @api.server @res[:host] }
+    on_success do
+      puts "下载测试文件测试网速"
+      serv_list = [ ]
+      @res[:list].each do |s|
+        elapsed = 0
+        print "%20s\t" % [s[:host]]
+        3.times do
+          elapsed += test_download_time("http://#{s[:host]}/monitor.jpg")
+        end
+        puts "#{elapsed.round(4)}s"
+        serv_list << [s[:host], elapsed ]
+      end
+      fastest = serv_list.sort_by(&:last).first.first
+      @api.server fastest
+    end
   end
 
   private
+
+  def test_download_time(url)
+    st = Time.now
+    @api.request(url)
+    Time.now - st
+  end
 
   def cli_commands
     return @commands  if @commands
