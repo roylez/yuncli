@@ -20,6 +20,7 @@ module TyphoeusConnection
   end
 
   def request(uri, detail = {})
+    detail = { connecttimeout: 5 }.merge detail
     request = Typhoeus::Request.new uri, detail
     yield(request)  if block_given?
     request.run
@@ -69,6 +70,8 @@ module NetHTTPConnection
       @http = Net::HTTP.new(u.host, u.port)
       @http.use_ssl = u.scheme == 'https'
     end
+    @http.open_timeout = 5
+    @http.read_timeout = 5
     header = detail.fetch(:headers, {})
     body   = detail.fetch(:body,    {})
     params = detail.fetch(:params,  {})
